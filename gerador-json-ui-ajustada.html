@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laboratório JSON — Interface Ajustada</title>
+  <link rel="stylesheet" href="gerador-json-wdompv120.css">
+
+  <script src="modulos-padrao-json/gpj-state.js" defer></script>
+  <script src="modulos-padrao-json/gpj-f7-catalog.js" defer></script>
+  <script src="modulos-padrao-json/gpj-utils.js" defer></script>
+  <script src="modulos-padrao-json/gpj-fields.js" defer></script>
+  <script src="modulos-padrao-json/gpj-global-indexes.js" defer></script>
+  <script src="modulos-padrao-json/gpj-option-tables.js" defer></script>
+  <script src="modulos-padrao-json/gpj-f7-generator.js" defer></script>
+  <script src="modulos-padrao-json/gpj-field-lookups.js" defer></script>
+  <script src="modulos-padrao-json/gpj-grid-lookups.js" defer></script>
+  <script src="modulos-padrao-json/gpj-grid.js" defer></script>
+  <script src="modulos-padrao-json/gpj-custom-buttons.js" defer></script>
+  <script src="modulos-padrao-json/gpj-mac-generator.js" defer></script>
+  <script src="modulos-padrao-json/gpj-rg-generator.js" defer></script>
+  <script src="modulos-padrao-json/gpj-file-saver.js" defer></script>
+  <script src="modulos-padrao-json/gpj-project-io.js" defer></script>
+  <script src="modulos-padrao-json/gpj-app.js" defer></script>
+</head>
+<body>
+  <header class="header">
+    <div>
+      <h1>Laboratório JSON — Interface Ajustada</h1>
+      <p>Versão com layout dinâmico: o maior label define o espaço e o alinhamento move label, leitor, display e botões em conjunto.</p>
+    </div>
+
+    <div class="header-actions">
+      <button id="labImportJsonButton" type="button" class="button">Importar JSON</button>
+      <button id="labPasteJsonButton" type="button" class="button">Colar JSON</button>
+      <button id="labExportJsonButton" type="button" class="button">Exportar JSON</button>
+      <button id="labCopyJsonButton" type="button" class="button">Copiar JSON</button>
+      <button id="loadExampleButton" type="button" class="button">Restaurar padrão</button>
+      <button id="copyMacButton" type="button" class="button primary">Copiar todas as interfaces</button>
+      <button id="copyRgButton" type="button" class="button primary">Copiar todas as RGs</button>
+      <input id="labJsonFileInput" type="file" accept="application/json,.json" class="hidden">
+    </div>
+  </header>
+
+  <main class="layout">
+    <div class="configuration">
+      <section class="card">
+        <div class="card-header"><h2>Dados da rotina</h2></div>
+        <div class="card-content form-grid">
+          <div class="field span-3">
+            <label for="routineName">Código da rotina principal</label>
+            <input id="routineName" value="WDOMTESTEU">
+          </div>
+
+          <div class="field span-3">
+            <label for="routineTitle">Título</label>
+            <input id="routineTitle" value="Cadastro de Configuração">
+          </div>
+
+          <div class="field span-2">
+            <label for="routineMode">Tipo de rotina</label>
+            <select id="routineMode">
+              <option value="crud" selected>Cadastro / manutenção</option>
+              <option value="grid">Consulta com Grid</option>
+            </select>
+          </div>
+
+          <div class="field span-4">
+            <label for="dataVariable">Variável principal dos dados</label>
+            <input id="dataVariable" value="WDOMCFG">
+          </div>
+
+          <details class="advanced-details span-6">
+            <summary>Dimensões da janela</summary>
+            <div class="form-grid advanced-details-content">
+              <div class="field span-3">
+                <label for="windowWidth">Largura</label>
+                <input id="windowWidth" type="number" min="1" value="108">
+              </div>
+
+              <div class="field span-3">
+                <label for="windowHeight">Altura</label>
+                <input id="windowHeight" type="number" min="1" value="28">
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="card save-project-card">
+        <div class="card-header">
+          <div>
+            <h2>Salvar no projeto</h2>
+            <span id="generatedFilesCount">0 arquivos prontos</span>
+          </div>
+          <span id="outputFolderStatus" class="status-badge neutral">Aguardando pasta</span>
+        </div>
+
+        <div class="card-content save-project-content">
+          <div class="save-folder-row">
+            <div class="save-folder-info">
+              <strong id="selectedFolderName">Nenhuma pasta selecionada</strong>
+              <span id="selectedFolderHint">Selecione a pasta ...\rotinas\WDOM do projeto.</span>
+            </div>
+
+            <div class="inline-actions save-folder-actions">
+              <button id="selectOutputFolderButton" type="button" class="button">Selecionar pasta</button>
+              <button id="saveGeneratedFilesButton" type="button" class="button primary" disabled>Salvar códigos</button>
+            </div>
+          </div>
+
+          <details class="advanced-details save-options-details">
+            <summary>Opções de salvamento</summary>
+            <div class="save-options advanced-details-content">
+              <label class="switch-label">
+                <input id="saveInterfaceFiles" type="checkbox" checked>
+                Salvar interfaces e abas
+              </label>
+              <label class="switch-label">
+                <input id="saveRuleFiles" type="checkbox" checked>
+                Salvar rotinas RG
+              </label>
+              <label class="switch-label">
+                <input id="overwriteGeneratedFiles" type="checkbox" checked>
+                Sobrescrever arquivos existentes
+              </label>
+            </div>
+          </details>
+
+          <p class="helper save-project-helper">Após salvar, o VS Code pode detectar os arquivos, sincronizar com o ambiente e compilar automaticamente.</p>
+          <div id="saveFilesResult" class="save-files-result hidden" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Abas</h2>
+          <label class="switch-label">
+            <input id="useTabs" type="checkbox" checked>
+            Usar abas
+          </label>
+        </div>
+
+        <div id="tabsConfiguration" class="card-content">
+          <details class="advanced-details">
+            <summary>Configurações do painel de abas</summary>
+            <div class="form-grid advanced-details-content">
+              <div class="field span-2">
+                <label for="sheetId">ID do TabPanel</label>
+                <input id="sheetId" value="sheet1">
+              </div>
+
+              <div class="field">
+                <label for="tabPanelLine">Linha</label>
+                <input id="tabPanelLine" type="number" min="1" value="2">
+              </div>
+
+              <div class="field">
+                <label for="tabPanelColumn">Coluna</label>
+                <input id="tabPanelColumn" type="number" min="1" value="1">
+              </div>
+
+              <div class="field">
+                <label for="tabPanelHeight">Altura</label>
+                <input id="tabPanelHeight" type="number" min="1" value="20">
+              </div>
+
+              <div class="field">
+                <label for="tabPanelWidth">Largura</label>
+                <input id="tabPanelWidth" type="number" min="1" value="80">
+              </div>
+
+              <div class="field span-2">
+                <label for="generateSaveAnother">Salvar e criar outro</label>
+                <select id="generateSaveAnother">
+                  <option value="0" selected>Não — padrão de manutenção</option>
+                  <option value="1">Sim</option>
+                </select>
+              </div>
+            </div>
+          </details>
+
+          <div class="section-heading">
+            <div>
+              <h3>Rotinas das abas</h3>
+              <p>Cada aba pode usar sua própria variável, subíndice e chaves locais.</p>
+            </div>
+            <button id="addTabButton" type="button" class="button primary small">Adicionar aba</button>
+          </div>
+
+          <div class="table-container compact">
+            <table class="tabs-table">
+              <thead>
+                <tr>
+                  <th>Ordem</th>
+                  <th>Remover</th>
+                  <th>Título</th>
+                  <th>Rotina</th>
+                  <th>Conteúdo</th>
+                  <th>Posição dos campos</th>
+                  <th>Foco final</th>
+                  <th>RG do Grid</th>
+                  <th>Variável dos dados</th>
+                  <th>Subíndice global</th>
+                  <th>Inicia desabilitada</th>
+                </tr>
+              </thead>
+              <tbody id="tabsTableBody"></tbody>
+            </table>
+          </div>
+          <p class="helper">Em “Esquerda”, o padrão usa label na coluna 7 e leitor na 16. Em “Meio”, usa label na 16 e leitor na 32. No foco automático, abas com Grid focam o Grid e abas com campos focam o botão Salvar.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2>Campos</h2>
+            <span id="fieldCount">0 campos</span>
+          </div>
+          <div class="field-header-actions">
+            <label class="switch-label compact-switch" title="Mostra coluna, linha e tamanho de labels, campos e displays.">
+              <input id="showFieldLayout" type="checkbox">
+              Exibir posições
+            </label>
+            <button id="addFieldButton" type="button" class="button primary small">Adicionar campo</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="fields-table compact-fields-table">
+            <thead>
+              <tr>
+                <th>Ordem</th>
+                <th>Remover</th>
+                <th>Descrição</th>
+                <th>Variável</th>
+                <th>Tipo</th>
+                <th>Local</th>
+                <th>Chave</th>
+                <th>Obrigatório</th>
+                <th>Display</th>
+                <th>Configuração</th>
+              </tr>
+            </thead>
+            <tbody id="fieldsTableBody"></tbody>
+          </table>
+        </div>
+
+        <p class="helper">
+          A chave da rotina principal compõe os índices gerais. Uma chave criada dentro de uma aba pertence somente àquela aba e é incluída depois do subíndice da global. Campos chave não ocupam pieces; campos comuns iniciam no piece 3 de cada variável de dados.
+        </p>
+      </section>
+
+      <section id="gridConfigurationCard" class="card hidden">
+        <div class="card-header">
+          <div>
+            <h2>Configuração do Grid</h2>
+            <span>Consulta simples com global temporária e rotina RG.</span>
+          </div>
+        </div>
+
+        <div class="card-content">
+          <div class="sub-card grid-location-panel">
+            <div class="field">
+              <label for="gridLocation">Criar/configurar Grid em</label>
+              <select id="gridLocation"></select>
+            </div>
+            <p class="helper">
+              Selecione a rotina principal ou a aba marcada como Grid. Cada destino mantém separadamente o código, posição, altura, linhas, global temporária, manutenção e colunas do Grid. A linha do Grid é sugerida duas linhas após o último campo da mesma rotina.
+            </p>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="gridCode">Código do grid</label>
+              <input id="gridCode" type="number" min="1" value="1">
+            </div>
+            <div class="field">
+              <label for="gridLinePosition">Linha de posição</label>
+              <input id="gridLinePosition" type="number" min="1" value="2">
+            </div>
+            <div class="field">
+              <label for="gridHeight">Altura</label>
+              <input id="gridHeight" type="number" min="1" value="17">
+            </div>
+            <div class="field">
+              <label for="gridLineStart">Linha inicial</label>
+              <input id="gridLineStart" type="number" min="1" value="2">
+            </div>
+            <div class="field">
+              <label for="gridLineEnd">Linha final</label>
+              <input id="gridLineEnd" type="number" min="1" value="20">
+            </div>
+            <div class="field">
+              <label for="gridNavigation">Navegação</label>
+              <select id="gridNavigation">
+                <option value="1" selected>Habilitada</option>
+                <option value="0">Desabilitada</option>
+              </select>
+            </div>
+            <div class="field span-2">
+              <label for="gridWorkGlobal">Global temporária dos dados</label>
+              <input id="gridWorkGlobal" value="mtempWDOMTESTEU">
+            </div>
+            <div class="field span-4">
+              <div class="mtemp-parameters-heading">
+                <div>
+                  <label>Parâmetros da mtemp</label>
+                  <p class="helper compact-helper">O último parâmetro identifica a linha. Os anteriores formam o contexto da global temporária.</p>
+                </div>
+                <button id="addGridWorkGlobalParameter" type="button" class="button small">Adicionar parâmetro</button>
+              </div>
+              <input id="gridWorkGlobalParameters" type="hidden" value="term=CT,codSequencia=CODSEQUENCIA">
+              <div class="mtemp-parameters-table-wrap">
+                <table class="mtemp-parameters-table">
+                  <thead>
+                    <tr>
+                      <th>Parâmetro na RG</th>
+                      <th>Variável/expressão da tela</th>
+                      <th>Função</th>
+                      <th>Remover</th>
+                    </tr>
+                  </thead>
+                  <tbody id="gridWorkGlobalParametersList"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="field span-2">
+              <label for="gridCheckGlobal">Global temporária dos checks</label>
+              <input id="gridCheckGlobal" value="mtempWDOMTESTEUCHECK">
+            </div>
+            <div class="field span-2">
+              <label for="gridEditLabel">Label de clique/edição</label>
+              <input id="gridEditLabel" value="TbCellClick">
+            </div>
+          </div>
+
+          <div id="gridConsultButtonOptions" class="sub-card grid-consult-panel">
+            <div class="grid-maintenance-section-title">
+              <strong>Botão padrão da consulta</strong>
+              <span>Aplicado automaticamente quando o tipo da rotina for Consulta com Grid.</span>
+            </div>
+            <div class="form-grid">
+              <label class="checkbox-option span-2">
+                <input id="gridUseConsultButton" type="checkbox" checked>
+                Gerar BtnConsultar
+              </label>
+              <div class="field">
+                <label for="gridConsultButtonColumn">Coluna</label>
+                <input id="gridConsultButtonColumn" type="number" min="1" value="50">
+              </div>
+              <div class="field">
+                <label for="gridConsultButtonLine">Linha</label>
+                <input id="gridConsultButtonLine" type="number" min="1" value="1">
+              </div>
+              <div class="field span-2">
+                <label>Labels geradas</label>
+                <input value="Consultar: 2000 | Limpar: 0500" disabled>
+              </div>
+            </div>
+          </div>
+
+          <label class="checkbox-option grid-inline-option">
+            <input id="gridInlineMaintenance" type="checkbox">
+            Gerar manutenção em linha no Grid — labels 3100, 3200, 3300, 4000 e 4999
+          </label>
+
+          <p class="helper">
+            Os campos cadastrados na seção <strong>Campos</strong> continuam sendo os campos principais/filtros da rotina. Somente as colunas marcadas como <strong>Editar</strong> entram na manutenção do Grid, usando o padrão <strong>0,3,3,codGrid</strong> dentro da label 4000.
+          </p>
+
+          <div id="gridMaintenanceOptions" class="sub-card grid-maintenance-panel hidden">
+            <div class="grid-maintenance-section">
+              <div class="grid-maintenance-section-title">
+                <strong>Posicionamento dos botões</strong>
+                <span>O primeiro grupo é sugerido duas linhas após o fim do Grid; os valores continuam editáveis.</span>
+              </div>
+
+              <label class="grid-maintenance-toggle grid-button-auto-option">
+                <input id="gridAutoButtonPosition" type="checkbox" checked>
+                <span>
+                  <strong>Posicionar automaticamente</strong>
+                  <small>Usa a coluna 1. O btnManut fica quatro linhas após o final do Grid e Salvar/Cancelar duas linhas abaixo.</small>
+                </span>
+              </label>
+
+              <div id="gridAutoButtonPositionSummary" class="grid-auto-position-summary">
+                Padrão gerado: <strong>csw:btnManut</strong> após o Grid, sem precisar calcular coluna e linha.
+              </div>
+
+              <div id="gridManualButtonPosition" class="grid-maintenance-position-grid hidden">
+                <div class="field">
+                  <label for="gridMaintenanceButtonColumn">Coluna inicial</label>
+                  <input id="gridMaintenanceButtonColumn" type="number" min="1" value="1">
+                </div>
+
+                <div class="field">
+                  <label for="gridMaintenanceButtonLine">Linha — Incluir, Remover e Manutenção</label>
+                  <input id="gridMaintenanceButtonLine" type="number" min="1" value="22">
+                </div>
+
+                <div class="field">
+                  <label for="gridSaveButtonLine">Linha — Salvar e Cancelar</label>
+                  <input id="gridSaveButtonLine" type="number" min="1" value="24">
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-maintenance-section">
+              <div class="grid-maintenance-section-title">
+                <strong>Comportamento</strong>
+                <span>Controle as ações disponíveis para a manutenção em linha.</span>
+              </div>
+
+              <div class="grid-maintenance-toggle-grid">
+                <label class="grid-maintenance-toggle">
+                  <input id="gridAllowInsert" type="checkbox" checked>
+                  <span>
+                    <strong>Permitir inclusão</strong>
+                    <small>O botão Incluir continua disponível mesmo quando o Grid estiver vazio.</small>
+                  </span>
+                </label>
+
+                <label class="grid-maintenance-toggle">
+                  <input id="gridAllowRemove" type="checkbox" checked>
+                  <span>
+                    <strong>Permitir remoção</strong>
+                    <small>Libera a exclusão da linha selecionada da global temporária.</small>
+                  </span>
+                </label>
+
+                <label class="grid-maintenance-toggle">
+                  <input id="gridRowEnter" type="checkbox" checked>
+                  <span>
+                    <strong>Enter abre a manutenção</strong>
+                    <small>Ao pressionar Enter em uma linha, executa a label 3300.</small>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <p class="grid-maintenance-note">
+              A coluna marcada como <strong>Chave</strong> identifica a linha na global temporária. Marque <strong>Travar edição</strong> quando essa chave não puder ser alterada em registros existentes. A gravação definitiva usa a global e os índices configurados na rotina RG.
+            </p>
+          </div>
+
+          <div class="section-heading">
+            <div>
+              <h3>Colunas do Grid</h3>
+              <p>A ordem define as posições das colunas no Grid. Colunas marcadas como Só display não usam piece da global temporária e podem ser obtidas por regra, por exemplo a descrição do cliente a partir da chave.</p>
+            </div>
+            <div class="inline-actions">
+              <button id="addGridCheckColumnButton" type="button" class="button small">Adicionar check</button>
+              <button id="addGridColumnButton" type="button" class="button primary small">Adicionar coluna</button>
+            </div>
+          </div>
+
+          <div class="table-container compact">
+            <table class="grid-columns-table">
+              <thead>
+                <tr>
+                  <th>Ordem</th>
+                  <th>Ações</th>
+                  <th>Título</th>
+                  <th>Tipo</th>
+                  <th>Largura</th>
+                  <th>Variável</th>
+                  <th>Piece trabalho</th>
+                  <th>Só display</th>
+                  <th>Expressão display</th>
+                  <th>Detalha</th>
+                  <th>Chave</th>
+                  <th>Editar</th>
+                  <th>Tipo edição</th>
+                  <th>Obrig.</th>
+                  <th>Travar edição</th>
+                  <th>Regra / F7</th>
+                  <th>Tabela</th>
+                  <th>Criar tabela RG</th>
+                  <th>Itens</th>
+                  <th>Valor inicial</th>
+                </tr>
+              </thead>
+              <tbody id="gridColumnsTableBody"></tbody>
+            </table>
+          </div>
+
+          <p class="helper">
+            Use <strong>Check com cabeçalho</strong> para gerar uma coluna <code>Tipo=checkheader</code>. O gerador cria automaticamente os eventos de clique da linha e do cabeçalho, as chamadas de <code>%CSW1GRIDCHECK</code> e os métodos obrigatórios na RG. No JSON simples, essa coluna pode ser informada apenas como <code>{ "type": "check" }</code>. Para as demais colunas, use <strong>Regra / F7</strong> para configurar descrições e validações.
+          </p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Rotina de regras RG</h2></div>
+        <div class="card-content">
+          <label class="checkbox-option">
+            <input id="useRules" type="checkbox" checked>
+            Gerar e integrar rotina RG
+          </label>
+
+          <div id="rulesConfiguration" class="sub-card">
+            <div class="form-grid">
+              <div class="field span-3">
+                <label for="rgRoutineName">Código da rotina RG</label>
+                <input id="rgRoutineName" value="WDOMPV100RG">
+              </div>
+
+              <div class="field span-3">
+                <label for="entityName">Nome da entidade/método</label>
+                <input id="entityName" value="Configuracao">
+              </div>
+
+              <div class="field span-6">
+                <label for="globalName">Nome da global</label>
+                <input id="globalName" value="WDOMCFG">
+              </div>
+            </div>
+
+            <div class="section-heading">
+              <div>
+                <h3>Índices gerais da global</h3>
+                <p>Somente as chaves da rotina principal são listadas aqui.</p>
+              </div>
+              <div class="inline-actions">
+                <button id="addKeyIndexButton" type="button" class="button primary small">Adicionar chave</button>
+                <button id="addFixedIndexButton" type="button" class="button small">Adicionar fixo</button>
+              </div>
+            </div>
+
+            <label class="checkbox-option company-source-option">
+              <input id="useRoutineCompany" type="checkbox" checked>
+              Usar <strong>CE</strong> da rotina como <strong>codEmpresa</strong> (não exige campo CODEMP)
+            </label>
+
+            <div class="table-container compact">
+              <table class="indexes-table">
+                <thead>
+                  <tr>
+                    <th>Ordem</th>
+                    <th>Tipo</th>
+                    <th>Campo chave</th>
+                    <th>Valor fixo</th>
+                    <th>Nome na RG</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="globalIndexesTableBody"></tbody>
+              </table>
+            </div>
+
+            <div class="field preview-global">
+              <label for="globalPreview">Referência base gerada</label>
+              <input id="globalPreview" disabled>
+            </div>
+
+            <div class="checkbox-grid">
+              <label><input id="generateObtain" type="checkbox" checked> Obter e inicializar</label>
+              <label><input id="generateSave" type="checkbox" checked> Gravar</label>
+              <label><input id="generateDelete" type="checkbox" checked> Excluir</label>
+              <label><input id="generateLock" type="checkbox" checked> Lock e Unlock</label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Botões de manutenção</h2></div>
+        <div class="card-content">
+          <label class="checkbox-option">
+            <input id="useBtnManter" type="checkbox" checked>
+            Gerar manutenção
+          </label>
+
+          <div id="btnManterConfiguration" class="sub-card">
+            <div class="maintenance-summary">
+              <div>
+                <strong>Padrão gerado</strong>
+                <span>Salvar, Excluir e Cancelar — posicionados após a aba</span>
+              </div>
+              <span class="status-badge">Manutenção padrão</span>
+            </div>
+
+            <details class="advanced-details compact-details">
+              <summary>Posição e local dos botões</summary>
+              <div class="form-grid advanced-details-content">
+                <div class="field">
+                  <label for="btnManterColumn">Coluna inicial</label>
+                  <input id="btnManterColumn" type="number" min="1" value="1">
+                </div>
+                <div class="field">
+                  <label for="btnManterLine">Linha sugerida</label>
+                  <input id="btnManterLine" type="number" min="1" value="24">
+                  <small>Duas linhas após o final do TabPanel. Ao editar, o valor passa a ser manual.</small>
+                </div>
+                <div class="field span-2">
+                  <label for="btnManterLocation">Local dos botões</label>
+                  <select id="btnManterLocation">
+                    <option value="parent">Rotina principal</option>
+                  </select>
+                </div>
+                <div class="field span-2">
+                  <label>Comportamento</label>
+                  <input value="Cancelar limpa e reinicializa em 0500" disabled>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="custom-buttons-section">
+            <div class="custom-buttons-header">
+              <div>
+                <strong>Botões personalizados</strong>
+                <span id="customButtonCount">0 botões</span>
+              </div>
+              <button id="addCustomButtonButton" type="button" class="button primary small">Adicionar botão</button>
+            </div>
+            <p class="helper">Cada botão fica recolhido. Clique em <strong>Editar</strong> somente no botão que deseja configurar.</p>
+            <div id="customButtonsContainer" class="custom-buttons-container"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card preview-card">
+      <div class="card-header preview-header">
+        <div class="preview-controls">
+          <div class="preview-tabs">
+            <button id="showMacPreviewButton" type="button" class="preview-tab active">Interfaces .mac</button>
+            <button id="showRgPreviewButton" type="button" class="preview-tab">RG</button>
+          </div>
+          <select id="macRoutinePreviewSelect" class="routine-preview-select"></select>
+        </div>
+
+        <button id="copyCurrentPreviewButton" type="button" class="button primary small">Copiar rotina atual</button>
+      </div>
+
+      <pre id="macCodePreview" class="code-preview"></pre>
+      <pre id="rgCodePreview" class="code-preview hidden"></pre>
+    </section>
+  </main>
+
+  <div id="optionTableModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="optionTableModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="optionTableModalTitle">Itens da tabela</h2>
+          <p id="optionTableModalDescription"></p>
+        </div>
+        <button id="closeOptionTableModalButton" type="button" class="icon-button modal-close" aria-label="Fechar">×</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="table-container compact">
+          <table class="option-items-table">
+            <thead><tr><th>Ordem</th><th>Valor</th><th>Descrição</th><th>Ações</th></tr></thead>
+            <tbody id="optionTableItemsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="addOptionTableItemButton" type="button" class="button primary">Adicionar item</button>
+        <button id="finishOptionTableButton" type="button" class="button">Concluir</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fieldLookupModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="fieldLookupModalTitle">
+    <div class="modal-card lookup-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="fieldLookupModalTitle">F7 e validação</h2>
+          <p>Escolha uma sugestão e altere livremente o F7, as variáveis e o código do Valcp.</p>
+        </div>
+        <button id="closeFieldLookupModalButton" type="button" class="icon-button modal-close" aria-label="Fechar">×</button>
+      </div>
+
+      <div class="modal-body lookup-form">
+        <div class="field">
+          <label for="fieldLookupPreset">Sugestão</label>
+          <div class="input-action-row">
+            <select id="fieldLookupPreset"></select>
+            <button id="applyFieldLookupPresetButton" type="button" class="button primary">Aplicar sugestão</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="fieldLookupRoutine">Rotina F7 usada no %CSLE</label>
+          <input id="fieldLookupRoutine" placeholder="Ex.: %EMP^CCAFC299">
+        </div>
+
+        <div class="field">
+          <label for="fieldLookupVariables">Variáveis adicionais no new</label>
+          <input id="fieldLookupVariables" placeholder="Ex.: EMP ou CSUM,DESMOE">
+        </div>
+
+        <div id="fieldTypedReaderConfiguration" class="sub-card">
+          <div class="section-heading compact-heading">
+            <div>
+              <h3>Leitor tipado</h3>
+              <p>Use para componentes especiais, como Produto com ITEM^CCCGIRG012(CFGITE).</p>
+            </div>
+            <label class="switch-label">
+              <input id="fieldUseTypedReader" type="checkbox">
+              Usar leitor tipado
+            </label>
+          </div>
+
+          <div id="fieldTypedReaderFields" class="form-grid hidden">
+            <div class="field span-2">
+              <label for="fieldTypedReaderConfigVariable">Variável da configuração</label>
+              <input id="fieldTypedReaderConfigVariable" placeholder="Ex.: CFGITE">
+            </div>
+
+            <div class="field span-4">
+              <label for="fieldTypedReaderConfigText">Configuração do leitor</label>
+              <input id="fieldTypedReaderConfigText" placeholder="Ex.: Tipo2: E/S; Tipo3: Pai/Filho/Normal">
+            </div>
+
+            <div class="field span-3">
+              <label for="fieldTypedReaderConfigMethod">Método de configuração</label>
+              <input id="fieldTypedReaderConfigMethod" placeholder="Ex.: ObterConfLeitor^CCCGIRG012">
+            </div>
+
+            <div class="field span-3">
+              <label for="fieldTypedReaderRoutine">Rotina do leitor</label>
+              <input id="fieldTypedReaderRoutine" placeholder="Ex.: ITEM^CCCGIRG012(CFGITE)">
+            </div>
+
+            <div class="field span-2">
+              <label for="fieldTypedReaderCompanyExpression">Empresa</label>
+              <input id="fieldTypedReaderCompanyExpression" placeholder="Ex.: CE">
+            </div>
+
+            <div class="field span-2">
+              <label for="fieldTypedReaderControlDefinition">Controle do CSLE</label>
+              <input id="fieldTypedReaderControlDefinition" placeholder="Ex.: ,,3,{cp}">
+            </div>
+
+            <div class="field span-2">
+              <label for="fieldTypedReaderExtraDefinition">Parâmetro adicional</label>
+              <input id="fieldTypedReaderExtraDefinition" placeholder="Ex.: ,1">
+            </div>
+
+            <div class="field span-2">
+              <label class="switch-label typed-reader-current-value">
+                <input id="fieldTypedReaderUseCurrentValue" type="checkbox" checked>
+                Enviar valor atual
+              </label>
+            </div>
+
+            <div class="field span-6">
+              <p class="helper lookup-helper">
+                Gera a configuração antes da tela e envia a rotina tipada no último parâmetro do %CSLE.
+                O marcador {cp} será substituído pelo ID real do campo.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="fieldLookupValcp">Código adicional dentro do Valcp</label>
+          <textarea id="fieldLookupValcp" rows="14" spellcheck="false"></textarea>
+          <p class="helper lookup-helper">
+            Marcadores disponíveis: {reference} (variável para chave ou $piece para campo comum), {fieldVariable}, {display}, {label}, {company}, {rgRoutine}, {routine} e {multiTable}.
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="fieldAfterFieldCode">Código executado após validar e sair do campo</label>
+          <textarea id="fieldAfterFieldCode" rows="8" spellcheck="false"></textarea>
+          <p class="helper lookup-helper">
+            Este código é gerado no fluxo do campo, depois do Valcp, e não é executado pelo Validate() ao salvar. Use para abrir uma tela auxiliar após o preenchimento do campo.
+          </p>
+        </div>
+
+        <div id="fieldMultiSelectConfiguration" class="sub-card hidden">
+          <h3>Configuração da Multi-Seleção</h3>
+          <div class="form-grid">
+            <div class="field span-3">
+              <label for="fieldMultiSelectTableVariable">Variável da tabela selecionada</label>
+              <input id="fieldMultiSelectTableVariable" placeholder="Ex.: TABNOT ou TABTIPONOTA">
+            </div>
+            <div class="field span-3">
+              <label for="fieldMultiSelectSelectedText">Texto quando houver itens</label>
+              <input id="fieldMultiSelectSelectedText" value="Selecionados">
+            </div>
+            <div class="field span-6">
+              <label for="fieldMultiSelectGlobalReference">Global da tabela</label>
+              <input id="fieldMultiSelectGlobalReference" placeholder="Vazio = usa a global/subíndice da aba automaticamente">
+              <p class="helper lookup-helper">
+                Pode informar uma referência completa, por exemplo ^WDOMPVCFG(2,codEmpresa,4,tipoPedido). Marcadores: {baseGlobal}, {company}, {reference}, {fieldVariable}, {rgRoutine} e {routine}.
+              </p>
+            </div>
+          </div>
+
+          <div id="fieldGeneratedF7Configuration" class="sub-card generated-f7-card hidden">
+            <div class="section-heading compact-heading">
+              <div>
+                <h3>F7 próprio — rotina 299</h3>
+                <p>Disponível para qualquer Multi-Seleção. Cada campo pode informar sua global de todos os registros, colunas, pieces e label.</p>
+              </div>
+              <label class="switch-label">
+                <input id="fieldGenerateF7Routine299" type="checkbox">
+                Gerar rotina 299
+              </label>
+            </div>
+
+            <div id="fieldGeneratedF7Fields" class="form-grid">
+              <div class="field span-3">
+                <label for="fieldGeneratedF7RoutineName">Nome da rotina 299</label>
+                <input id="fieldGeneratedF7RoutineName" placeholder="Ex.: WDOMPV299">
+                <p class="helper lookup-helper">Sugestão automática: troca os três últimos números da rotina principal por 299.</p>
+              </div>
+              <div class="field span-3">
+                <label for="fieldGeneratedF7Label">Label do F7</label>
+                <input id="fieldGeneratedF7Label" placeholder="Ex.: TIPNOT">
+              </div>
+              <div class="field span-6">
+                <label for="fieldGeneratedF7SelectedGlobal">Global com todos os registros</label>
+                <input id="fieldGeneratedF7SelectedGlobal" placeholder="Ex.: ^%CSTN(@1), ^FTCL(CODEMP,@1) ou ^PVTB(CE,126,1,@1)">
+                <p class="helper lookup-helper">
+                  Informe a global que contém <strong>todos os registros disponíveis</strong>. Os selecionados continuam vindo da <strong>Global onde a Multi-Seleção será gravada</strong>, configurada acima.
+                </p>
+              </div>
+
+              <div class="field span-3">
+                <label for="fieldGeneratedF7ColumnSizes">Tamanhos das colunas</label>
+                <input id="fieldGeneratedF7ColumnSizes" placeholder="Ex.: 7,50">
+              </div>
+
+              <div class="field span-3">
+                <label for="fieldGeneratedF7Pieces">Pieces exibidos</label>
+                <input id="fieldGeneratedF7Pieces" placeholder="Ex.: 2 ou 1,8">
+              </div>
+
+              <div class="field span-4">
+                <label for="fieldGeneratedF7Titles">Títulos das colunas</label>
+                <input id="fieldGeneratedF7Titles" placeholder="Ex.: Código Cliente,Nome">
+              </div>
+
+              <div class="field span-2">
+                <label for="fieldGeneratedF7Rows">Quantidade de linhas</label>
+                <input id="fieldGeneratedF7Rows" type="number" min="5" max="40" value="15">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="fieldLookupDisplayMode">Como preencher o display ao carregar a tela (8000)</label>
+          <select id="fieldLookupDisplayMode">
+            <option value="reference">Mostrar o próprio valor do campo</option>
+            <option value="valcp">Executar o Valcp para buscar a descrição</option>
+            <option value="custom">Executar código personalizado</option>
+          </select>
+          <p class="helper lookup-helper">
+            Para Empresa, Cliente, Tabela de preço, Moeda e Condição de venda, use “Executar o Valcp”. Assim o display recebe a descrição retornada pela validação, e não o código armazenado no $piece.
+          </p>
+        </div>
+
+        <div id="fieldLookupDisplayCodeContainer" class="field hidden">
+          <label for="fieldLookupDisplayCode">Código personalizado para o display no 8000</label>
+          <textarea id="fieldLookupDisplayCode" rows="7" spellcheck="false" placeholder="Ex.: do Set^%CSW1UTI(%PRG,&quot;{display}&quot;,&quot;Descrição&quot;)"></textarea>
+          <p class="helper lookup-helper">
+            Os mesmos marcadores do Valcp podem ser utilizados. O código será incluído depois do carregamento do campo na rotina 8000.
+          </p>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="clearFieldLookupButton" type="button" class="button danger-outline">Limpar configuração</button>
+        <button id="finishFieldLookupButton" type="button" class="button primary">Concluir</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="gridLookupModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="gridLookupModalTitle">
+    <div class="modal-card lookup-modal-card grid-rule-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="gridLookupModalTitle">Regra de obtenção e display da coluna</h2>
+          <p>Configure a regra usada para buscar a descrição da coluna, a expressão exibida no Grid e, quando houver edição, o F7 e o Valcp da label 4000.</p>
+        </div>
+        <button id="closeGridLookupModalButton" type="button" class="icon-button modal-close" aria-label="Fechar">×</button>
+      </div>
+
+      <div class="modal-body lookup-form grid-rule-form">
+        <div class="field">
+          <label for="gridLookupPreset">Sugestão</label>
+          <div class="input-action-row">
+            <select id="gridLookupPreset"></select>
+            <button id="applyGridLookupPresetButton" type="button" class="button primary">Aplicar sugestão</button>
+          </div>
+          <p class="helper">As tabelas já configuradas no gerador aparecem automaticamente nesta lista.</p>
+        </div>
+
+        <div class="grid-rule-section">
+          <div class="grid-rule-section-title">
+            <strong>Carregamento da tabela ou regra auxiliar</strong>
+            <span>Executado uma vez na rotina de interface, antes da abertura do Grid.</span>
+          </div>
+
+          <div class="field">
+            <label for="gridLookupInitializer">Regra de inicialização</label>
+            <textarea id="gridLookupInitializer" rows="5" spellcheck="false" placeholder="Ex.: set sc=$$ObterTabGridTabsit^WDOMTESTEURG(.TABSIT)"></textarea>
+            <p class="helper">Marcadores: {company}, {rgRoutine}, {routine} e {gridCode}.</p>
+          </div>
+        </div>
+
+        <div class="grid-rule-section">
+          <div class="grid-rule-section-title">
+            <strong>Obtenção da descrição de cada linha</strong>
+            <span>Executado dentro do GravarGrid da RG, depois que o valor da coluna foi lido.</span>
+          </div>
+
+          <div class="field">
+            <label for="gridLookupObtain">Regra de obter</label>
+            <textarea id="gridLookupObtain" rows="7" spellcheck="false" placeholder="Ex.: set sc=$$ObterNomeCliente^CCFT760RG(codEmpresa,{value},.FTCL)"></textarea>
+            <p class="helper">Marcadores: {value}, {variable}, {source}, {column}, {gridColumn}, {gridCode}, {company}, {rgRoutine} e {routine}.</p>
+          </div>
+
+          <div class="field">
+            <label for="gridLookupDisplayExpression">Expressão final do display</label>
+            <input id="gridLookupDisplayExpression" placeholder="Ex.: $get(TABSIT({value})) ou $piece(FTCL,Z,2)">
+            <p class="helper">O valor original permanece em <strong>dados</strong>; esta expressão será gravada em <strong>display</strong>.</p>
+          </div>
+
+          <div class="field">
+            <label for="gridLookupVariables">Variáveis da interface / manutenção</label>
+            <input id="gridLookupVariables" placeholder="Ex.: TABSIT, FTCL ou CSUM,DESMOE">
+          </div>
+
+          <div class="field">
+            <label for="gridLookupRuleVariables">Variáveis locais da regra GravarGrid</label>
+            <input id="gridLookupRuleVariables" placeholder="Ex.: FTCL ou CSUM,DESMOE. Tabelas herdadas da interface podem ficar em branco.">
+          </div>
+        </div>
+
+        <div class="grid-rule-section">
+          <div class="grid-rule-section-title">
+            <strong>Manutenção em linha</strong>
+            <span id="gridLookupMaintenanceNote">F7 e Valcp são utilizados somente quando a coluna estiver marcada como Editar.</span>
+          </div>
+
+          <div class="field">
+            <label for="gridLookupRoutine">Rotina F7 usada no %CSLE da label 4000</label>
+            <input id="gridLookupRoutine" placeholder="Ex.: FTCL^CCCT299">
+          </div>
+
+          <div class="field">
+            <label for="gridLookupValcp">Código adicional dentro do Valcp da coluna</label>
+            <textarea id="gridLookupValcp" rows="10" spellcheck="false"></textarea>
+            <p class="helper lookup-helper">
+              Marcadores: {reference}, {fieldVariable}, {gridLine}, {gridColumn}, {gridCode}, {company}, {rgRoutine} e {routine}. Quando houver código personalizado, ele substitui o TbSet automático do Valcp.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="clearGridLookupButton" type="button" class="button danger-outline">Limpar configuração</button>
+        <button id="finishGridLookupButton" type="button" class="button primary">Concluir</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+
+  <div id="labJsonModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="labJsonModalTitle">
+    <div class="modal-card json-io-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="labJsonModalTitle">Importar configuração por JSON</h2>
+          <p>O padrão atual continua disponível. Carregar o JSON substitui somente a configuração que está aberta nesta versão.</p>
+        </div>
+        <button id="labCloseJsonModalButton" type="button" class="icon-button modal-close" aria-label="Fechar">×</button>
+      </div>
+
+      <div class="modal-body json-io-body">
+        <div class="json-io-toolbar">
+          <button id="labFormatJsonButton" type="button" class="button">Validar e formatar</button>
+          <span id="labJsonMessage" class="json-io-message neutral">Cole o JSON exportado ou um JSON no formato para IA.</span>
+        </div>
+        <textarea id="labJsonTextarea" class="json-io-textarea" spellcheck="false" placeholder="Cole aqui o JSON do projeto..."></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button id="labCancelJsonButton" type="button" class="button">Cancelar</button>
+        <button id="labLoadJsonButton" type="button" class="button primary">Carregar JSON</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
