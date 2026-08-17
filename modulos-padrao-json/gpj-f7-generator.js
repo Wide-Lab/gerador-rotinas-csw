@@ -288,8 +288,22 @@
     return u.normalizeVariable(value, "F7").slice(0, maxLength);
   }
 
+  function shortHash(value) {
+    let hash = 0;
+    for (let position = 0; position < value.length; position += 1) {
+      hash = (hash * 31 + value.charCodeAt(position)) >>> 0;
+    }
+    return hash.toString(36).toUpperCase().slice(-2).padStart(2, "0");
+  }
+
   function mtempReferences(routineName, label) {
-    const base = compactName(`${routineName}${label}`, 22);
+    // O Caché aceita no máximo 31 caracteres no nome da global. O maior sufixo
+    // usado aqui é NAOSEL (6) e o prefixo é mtemp (5), então sobram 20 para a
+    // base. Quando o nome precisa ser cortado, os dois últimos caracteres viram
+    // um hash do nome completo para duas consultas diferentes não colidirem.
+    const full = compactName(`${routineName}${label}`, 64);
+    const base =
+      full.length <= 20 ? full : `${full.slice(0, 18)}${shortHash(full)}`;
 
     return {
       selectedRoot: `^mtemp${base}SEL(%index)`,
