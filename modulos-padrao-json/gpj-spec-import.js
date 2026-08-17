@@ -68,7 +68,7 @@
     [/\bdata\b|\bdate\b|dt\b/, "date"],
     [/checkbox|check|sim.?nao|flag|booleano|logico/, "checkbox"],
     [/radio/, "radio"],
-    [/combo|lista|selec|dominio|opcoes/, "combo"],
+    [/combo|lista|selec|dominio|opcoes|situacao|status/, "combo"],
     [/decimal|monetario|moeda|dinheiro|valor|preco|percent|aliquota|taxa/, "decimal"],
     [/float|real|fracion/, "float"],
     [/inteiro|integer|\bint\b|numerico|numero|\bnum\b|quantidade|qtd|sequenc|codigo/, "integer"],
@@ -853,7 +853,15 @@ Observação Geral (textarea, 200)
     });
   }
 
-  app.specImport = { parse, open, close, install, EXAMPLE };
+  app.specImport = {
+    parse,
+    open,
+    close,
+    install,
+    EXAMPLE,
+    // Reaproveitados pelo importador de imagem.
+    helpers: { variableFromDescription, inferType, inferLookup, defaultSize, words }
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", install, { once: true });
