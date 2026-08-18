@@ -136,18 +136,28 @@
     // colados um embaixo do outro. Um espaçamento que aparece uma vez só pode
     // ser um pulo de linha proposital.
     const sortedGaps = [...gaps].sort((a, b) => a - b);
+    // Uma linha não pode ser mais baixa que o próprio texto: o OCR às vezes
+    // quebra uma linha em duas e o menor espaçamento vira ruído.
+    const floor = median(heights) * 1.05;
     const repeated = sortedGaps.find(
-      (gap) => sortedGaps.filter((other) => Math.abs(other - gap) <= gap * 0.2).length >= 2
+      (gap) =>
+        gap >= floor &&
+        sortedGaps.filter((other) => Math.abs(other - gap) <= gap * 0.2).length >= 2
     );
 
     const estimatedLine = repeated || byHeight || sortedGaps[0] || 0;
 
+    const estimatedColumns =
+      estimatedChar > 0
+        ? Math.round(view.image.naturalWidth / estimatedChar)
+        : view.calibration.columns;
+
     return {
-      columns: estimatedChar > 0
-        ? Math.max(40, Math.min(240, Math.round(view.image.naturalWidth / estimatedChar)))
-        : view.calibration.columns,
+      // Acima de 160 é print de tela web com fonte pequena; a janela CSW usa
+      // 108 colunas e as posições continuam proporcionais.
+      columns: estimatedColumns > 160 ? 108 : Math.max(40, estimatedColumns),
       lines: estimatedLine > 0
-        ? Math.max(8, Math.min(90, Math.round(view.image.naturalHeight / estimatedLine)))
+        ? Math.max(8, Math.min(60, Math.round(view.image.naturalHeight / estimatedLine)))
         : view.calibration.lines
     };
   }
@@ -220,17 +230,146 @@
     return result;
   }
 
-  async function runOcr(onProgress) {
-    const worker = await tesseractWorker(onProgress);
-    const result = await worker.recognize(view.image, {}, { blocks: true, text: true });
+  // Recorta uma faixa escura, inverte e amplia: texto claro sobre fundo
+  // escuro só é lido assim.
+  function croppedInverted(band, scale = 4) {
+    const margin = 6;
+    const width = Math.max(1, Math.round(band.x1 - band.x0));
+    const height = Math.max(1, Math.round(band.y1 - band.y0));
 
-    return flattenWords(result.data)
+    const source = document.createElement("canvas");
+    source.width = width;
+    source.height = height;
+    const sourceCtx = source.getContext("2d");
+    sourceCtx.drawImage(
+      view.image,
+      Math.round(band.x0),
+      Math.round(band.y0),
+      width,
+      height,
+      0,
+      0,
+      width,
+      height
+    );
+
+    // Só inverte. Binarizar destrói os glifos finos do botão.
+    const pixels = sourceCtx.getImageData(0, 0, width, height);
+    for (let position = 0; position < pixels.data.length; position += 4) {
+      pixels.data[position] = 255 - pixels.data[position];
+      pixels.data[position + 1] = 255 - pixels.data[position + 1];
+      pixels.data[position + 2] = 255 - pixels.data[position + 2];
+    }
+    sourceCtx.putImageData(pixels, 0, 0);
+
+    const target = document.createElement("canvas");
+    target.width = width * scale + margin * 2;
+    target.height = height * scale + margin * 2;
+
+    const ctx = target.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, target.width, target.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(source, margin, margin, width * scale, height * scale);
+
+    return target;
+  }
+
+  function normalizeWords(data, extra = {}) {
+    return flattenWords(data)
       .filter((word) => String(word.text || "").trim().length > 0)
       .map((word) => ({
         text: String(word.text).trim(),
         confidence: word.confidence,
-        bbox: word.bbox
+        bbox: word.bbox,
+        ...extra
       }));
+  }
+
+  // Print de tela cheia costuma vir com fonte de 11px. Ampliar antes de ler
+  // melhora muito o reconhecimento; as coordenadas voltam divididas.
+  function scaledCanvas(scale) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(view.image.naturalWidth * scale);
+    canvas.height = Math.round(view.image.naturalHeight * scale);
+
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(view.image, 0, 0, canvas.width, canvas.height);
+
+    return canvas;
+  }
+
+  async function runOcr(onProgress) {
+    const worker = await tesseractWorker(onProgress);
+
+    const scale = view.image.naturalWidth >= 1200 ? 2 : 1;
+    const target = scale > 1 ? scaledCanvas(scale) : view.image;
+
+    const result = await worker.recognize(target, {}, { blocks: true, text: true });
+    const words = normalizeWords(result.data).map((word) =>
+      scale === 1
+        ? word
+        : {
+            ...word,
+            bbox: {
+              x0: word.bbox.x0 / scale,
+              y0: word.bbox.y0 / scale,
+              x1: word.bbox.x1 / scale,
+              y1: word.bbox.y1 / scale
+            }
+          }
+    );
+
+    const probe = backgroundProbe();
+    const bands = probe ? probe.darkBands(probe.page * 0.55) : [];
+    view.bands = bands;
+    view.darkTexts = [];
+
+    if (!bands.length) return words;
+
+    if (onProgress) onProgress({ status: "lendo botões", progress: 0.92 });
+
+    // Cada faixa é uma linha só de texto.
+    try {
+      await worker.setParameters({ tessedit_pageseg_mode: "7" });
+    } catch (error) {
+      // Versões antigas do motor ignoram o parâmetro.
+    }
+
+    for (let index = 0; index < bands.length; index += 1) {
+      const band = bands[index];
+
+      try {
+        const reading = await worker.recognize(croppedInverted(band), {}, { text: true });
+        const text = String(reading.data.text || "")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        // Texto de botão é claro sobre escuro e pequeno: quando sai
+        // ilegível, vale a posição e o nome fica para o usuário.
+        const legible = text
+          .split(/s+/)
+          .some((word) => /^[A-Za-zÀ-ÿ]{5,}$/.test(word));
+
+        view.darkTexts.push({
+          band,
+          text: legible ? text : `Botão ${index + 1}`,
+          uncertain: !legible
+        });
+      } catch (error) {
+        // Uma faixa ilegível não pode derrubar a leitura inteira.
+      }
+    }
+
+    try {
+      await worker.setParameters({ tessedit_pageseg_mode: "3" });
+    } catch (error) {
+      // Volta ao modo automático para a próxima imagem.
+    }
+    return words;
   }
 
   /* ------------------------------------------------------------------ *
@@ -267,6 +406,8 @@
     lineWords.forEach((word) => {
       if (current && word.bbox.x0 - current.bbox.x1 <= maxGap) {
         current.words.push(word);
+        current.onDark = current.onDark || word.onDark === true;
+        current.dark = current.dark || word.dark;
         current.text = `${current.text} ${word.text}`;
         current.bbox = {
           x0: Math.min(current.bbox.x0, word.bbox.x0),
@@ -277,7 +418,13 @@
         return;
       }
 
-      current = { text: word.text, bbox: { ...word.bbox }, words: [word] };
+      current = {
+        text: word.text,
+        bbox: { ...word.bbox },
+        words: [word],
+        onDark: word.onDark === true,
+        dark: word.dark
+      };
       runs.push(current);
     });
 
@@ -289,13 +436,14 @@
   const VALUE_PATTERN = /^[\d.,:/\-%R$ ]+$/;
   const DATE_PATTERN = /^\d{2}[/\-.]\d{2}[/\-.]\d{2,4}$/;
   const NUMBER_PATTERN = /^-?[\d.]*\d(?:,\d+)?$/;
+  const ORNAMENT_PATTERN = /^[-=~^v«»|_.\s]+$/;
 
   /* ------------------------------------------------------------------ *
    * Leitura das regiões da tela
    *
-   * Uma tela CSW não é só "label + leitor". Ela tem tabela (grid), tira de
-   * abas e barra de botões. Sem separar isso, o texto de dentro da tabela vira
-   * um monte de campo picado.
+   * Uma tela do ERP tem cabeçalho, tira de abas, caixa de filtros, tabela e
+   * barra de botões. Sem separar isso, o texto de dentro da tabela vira um
+   * monte de campo picado e a tira de abas se perde.
    * ------------------------------------------------------------------ */
 
   function lineModel() {
@@ -317,12 +465,12 @@
       .filter((line) => line.runs.length);
   }
 
-  // Fração dos runs da linha B que começam na mesma coluna de algum run da A.
-  function alignmentScore(reference, line, tolerance) {
+  // Fração dos runs da linha que começam na mesma coluna de alguma referência.
+  function alignmentScore(references, line, tolerance) {
     if (!line.runs.length) return 0;
 
     const hits = line.runs.filter((run) =>
-      reference.runs.some((other) => Math.abs(other.bbox.x0 - run.bbox.x0) <= tolerance)
+      references.some((value) => Math.abs(value - run.bbox.x0) <= tolerance)
     ).length;
 
     return hits / line.runs.length;
@@ -358,7 +506,18 @@
     return "a";
   }
 
-  // O maior bloco de linhas alinhadas em coluna é a tabela da tela.
+  function cleanTitle(text) {
+    return String(text || "")
+      .replace(/[:：]\s*$/, "")
+      .replace(/^[-=~^v«»|_.\s]+/, "")
+      .replace(/[-=~^v«»|_.\s]+$/, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  // O maior bloco de linhas alinhadas em coluna é o corpo da tabela. O
+  // cabeçalho costuma ficar de fora porque tem ícone de filtro e ordenação no
+  // meio do texto, então ele é promovido depois, testado contra as colunas.
   function detectTable(lines) {
     const tolerance = charWidth() * 1.8;
     let best = null;
@@ -366,11 +525,12 @@
     for (let start = 0; start < lines.length; start += 1) {
       if (lines[start].runs.length < 3) continue;
 
+      const references = lines[start].runs.map((run) => run.bbox.x0);
       let end = start;
       while (
         end + 1 < lines.length &&
         lines[end + 1].runs.length >= 2 &&
-        alignmentScore(lines[start], lines[end + 1], tolerance) >= 0.6
+        alignmentScore(references, lines[end + 1], tolerance) >= 0.6
       ) {
         end += 1;
       }
@@ -383,17 +543,68 @@
 
     if (!best) return null;
 
-    const body = lines.slice(best.start, best.end + 1);
-    const header = body[0];
-    const dataLines = body.slice(1);
+    let body = lines.slice(best.start, best.end + 1);
 
-    const starts = [];
-    body.forEach((line) => line.runs.forEach((run) => starts.push(run.bbox.x0)));
+    function columnStarts(source) {
+      const starts = [];
+      source.forEach((line) => line.runs.forEach((run) => starts.push(run.bbox.x0)));
+      return clusterValues(starts, tolerance)
+        .filter((cluster) => cluster.count >= 2)
+        .sort((a, b) => a.start - b.start);
+    }
 
-    const clusters = clusterValues(starts, tolerance)
-      // Coluna que aparece em uma linha só costuma ser texto solto.
-      .filter((cluster) => cluster.count >= 2)
-      .sort((a, b) => a.start - b.start);
+    // Promove a linha de cima a cabeçalho quando ela casa com as colunas.
+    // Procura algumas linhas acima porque o OCR costuma soltar fragmentos de
+    // uma palavra entre o cabeçalho e a primeira linha de dados.
+    let above = null;
+    for (let back = 1; back <= 3; back += 1) {
+      const candidate = lines[best.start - back];
+      if (!candidate) break;
+      if (body[0].top - candidate.bottom > lineHeight() * 3) break;
+
+      const significant = candidate.runs.filter((run) => !ORNAMENT_PATTERN.test(run.text));
+      if (significant.length >= 3) {
+        above = candidate;
+        break;
+      }
+    }
+    let header = body[0];
+    let dataLines = body.slice(1);
+
+    if (above && above.runs.length >= 3) {
+      const references = columnStarts(body).map((cluster) => cluster.start);
+      const near = body[0].top - above.bottom < lineHeight() * 2.6;
+
+      // Ícone de filtro e de ordenação viram runs de um caractere no meio do
+      // cabeçalho; contá-los derrubava o alinhamento.
+      const meaningful = {
+        runs: above.runs.filter((run) => !ORNAMENT_PATTERN.test(run.text))
+      };
+      const matches = alignmentScore(references, meaningful, tolerance * 1.4);
+      const textual = meaningful.runs.some((run) => LABEL_PATTERN.test(run.text));
+
+      // Uma tira de abas logo acima da tabela casa em algumas colunas por
+      // coincidência; o cabeçalho de verdade tem quase um título por coluna.
+      const enough = meaningful.runs.length >= references.length * 0.7;
+
+      if (near && textual && enough && matches >= 0.5) {
+        header = above;
+        dataLines = body;
+        body = [above, ...body];
+      }
+    }
+
+    // As colunas saem dos dados; uma coluna vazia só aparece no cabeçalho, e
+    // sem isso dois títulos vizinhos acabavam no mesmo cluster.
+    const clusters = columnStarts(dataLines);
+    header.runs
+      .filter((run) => !ORNAMENT_PATTERN.test(run.text))
+      .forEach((run) => {
+        if (!clusters.some((cluster) => Math.abs(cluster.start - run.bbox.x0) <= tolerance)) {
+          clusters.push({ start: run.bbox.x0, count: 1 });
+        }
+      });
+    clusters.sort((a, b) => a.start - b.start);
 
     if (clusters.length < 2) return null;
 
@@ -410,13 +621,10 @@
         .filter(
           (word) =>
             word.bbox.x0 >= cluster.start - tolerance &&
-            word.bbox.x0 < limit - tolerance / 2
+            word.bbox.x0 < limit - tolerance / 2 &&
+            !ORNAMENT_PATTERN.test(word.text)
         )
         .sort((a, b) => a.bbox.x0 - b.bbox.x0);
-
-      const title = titleWords.length
-        ? { text: titleWords.map((word) => word.text).join(" ") }
-        : null;
 
       const values = dataLines
         .map((line) =>
@@ -430,7 +638,7 @@
         .map((run) => run.text);
 
       return {
-        title: title ? title.text.replace(/[:：]\s*$/, "").trim() : `Coluna ${index + 1}`,
+        title: cleanTitle(titleWords.map((word) => word.text).join(" ")),
         start: cluster.start,
         width: Math.max(3, toSize(limit - cluster.start) - 1),
         type: columnTypeFromValues(values),
@@ -440,6 +648,8 @@
 
     return {
       lines: body,
+      header,
+      dataLines,
       top: header.top,
       bottom: body[body.length - 1].bottom,
       left: Math.min(...body.map((line) => Math.min(...line.runs.map((run) => run.bbox.x0)))),
@@ -448,8 +658,8 @@
     };
   }
 
-  /* Fundo local de um texto: acha botão (texto sobre caixa escura) sem
-     precisar de visão computacional. */
+  /* Leitura de pixel: acha caixa de marcação, faixa escura (botão) e o fundo
+     local de um texto. Sem isso não dá para separar botão de rótulo. */
   function backgroundProbe() {
     if (!view.image) return null;
 
@@ -475,10 +685,114 @@
       for (let y = 0; y < off.height; y += 7) {
         for (let x = 0; x < off.width; x += 7) samples.push(luminance(x, y));
       }
+      const page = median(samples);
 
       return {
-        page: median(samples),
-        // Limites da caixa escura em volta do texto (botão).
+        page,
+        canvas: off,
+
+        // Quadradinho desenhado à esquerda do texto: checkbox ou radio.
+        hasBoxLeft(bbox, reach = 2.6) {
+          const cw = charWidth();
+          const middle = (bbox.y0 + bbox.y1) / 2;
+          const from = bbox.x0 - cw * reach;
+          const to = bbox.x0 - cw * 0.2;
+          if (from < 1) return false;
+
+          let darkest = 255;
+          let lightest = 0;
+          for (let x = from; x <= to; x += 1) {
+            for (let y = middle - lineHeight() * 0.35; y <= middle + lineHeight() * 0.35; y += 2) {
+              const value = luminance(x, y);
+              darkest = Math.min(darkest, value);
+              lightest = Math.max(lightest, value);
+            }
+          }
+
+          return lightest - darkest > 60 && darkest < page * 0.7;
+        },
+
+        // Retângulos escuros da tela — em geral os botões.
+        darkBands(threshold) {
+          const blockX = 8;
+          const blockY = 4;
+          const cols = Math.ceil(off.width / blockX);
+          const rows = Math.ceil(off.height / blockY);
+          const dark = new Uint8Array(cols * rows);
+
+          for (let row = 0; row < rows; row += 1) {
+            for (let col = 0; col < cols; col += 1) {
+              const value = luminance(col * blockX + blockX / 2, row * blockY + blockY / 2);
+              dark[row * cols + col] = value < threshold ? 1 : 0;
+            }
+          }
+
+          const seen = new Uint8Array(cols * rows);
+          const boxes = [];
+
+          for (let row = 0; row < rows; row += 1) {
+            for (let col = 0; col < cols; col += 1) {
+              const index = row * cols + col;
+              if (!dark[index] || seen[index]) continue;
+
+              const stack = [index];
+              seen[index] = 1;
+              let minC = col;
+              let maxC = col;
+              let minR = row;
+              let maxR = row;
+              let size = 0;
+
+              while (stack.length) {
+                const current = stack.pop();
+                const currentRow = Math.floor(current / cols);
+                const currentCol = current % cols;
+                size += 1;
+
+                minC = Math.min(minC, currentCol);
+                maxC = Math.max(maxC, currentCol);
+                minR = Math.min(minR, currentRow);
+                maxR = Math.max(maxR, currentRow);
+
+                [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dc, dr]) => {
+                  const nextCol = currentCol + dc;
+                  const nextRow = currentRow + dr;
+                  if (nextCol < 0 || nextCol >= cols || nextRow < 0 || nextRow >= rows) return;
+                  const nextIndex = nextRow * cols + nextCol;
+                  if (dark[nextIndex] && !seen[nextIndex]) {
+                    seen[nextIndex] = 1;
+                    stack.push(nextIndex);
+                  }
+                });
+              }
+
+              const width = (maxC - minC + 1) * blockX;
+              const height = (maxR - minR + 1) * blockY;
+              const fill = size / ((maxC - minC + 1) * (maxR - minR + 1));
+
+              // Botão: retângulo cheio, mais largo do que alto, do tamanho de
+              // uma linha de texto.
+              if (
+                width >= charWidth() * 5 &&
+                height >= lineHeight() * 0.6 &&
+                height <= lineHeight() * 2.5 &&
+                width / height >= 2.5 &&
+                fill > 0.75
+              ) {
+                boxes.push({
+                  x0: minC * blockX,
+                  y0: minR * blockY,
+                  x1: (maxC + 1) * blockX,
+                  y1: (maxR + 1) * blockY
+                });
+              }
+            }
+          }
+
+          return boxes;
+        },
+
+        // Limites da caixa escura em volta do texto.
         expand(bbox, threshold) {
           const middle = (bbox.y0 + bbox.y1) / 2;
           let left = bbox.x0;
@@ -495,6 +809,7 @@
 
           return { x0: left, y0: top, x1: right, y1: bottom };
         },
+
         around(bbox) {
           const values = [];
           const step = Math.max(2, Math.round((bbox.x1 - bbox.x0) / 12));
@@ -515,24 +830,42 @@
   }
 
   function detectButtons(lines, table, probe) {
+    const floor = table ? table.bottom : view.image.naturalHeight * 0.5;
+    const readings = Array.isArray(view.darkTexts) ? view.darkTexts : [];
+
+    // Caminho principal: cada faixa escura abaixo da área de dados é um botão,
+    // com o texto lido no passe ampliado.
+    if (readings.length) {
+      return readings
+        .filter((reading) => reading.band.y0 >= floor)
+        .map((reading) => ({
+          id: app.utils.createId(),
+          include: true,
+          text: cleanTitle(reading.text),
+          line: toLine(reading.band.y0, reading.band.y1 - reading.band.y0),
+          column: toColumn(reading.band.x0),
+          size: Math.max(8, toSize(reading.band.x1 - reading.band.x0)),
+          box: reading.band,
+          textBox: reading.band
+        }));
+    }
+
+    // Sem leitura de pixel: texto curto sobre fundo escuro, abaixo da tabela.
     const buttons = [];
 
     lines.forEach((line) => {
       if (table && line.top >= table.top - 2 && line.bottom <= table.bottom + 2) return;
 
       line.runs.forEach((run) => {
-        const text = run.text.trim();
+        const text = cleanTitle(run.text);
         if (!LABEL_PATTERN.test(text)) return;
         if (text.length > 28 || text.includes(":")) return;
+        if (run.bbox.y0 < floor) return;
 
         const local = probe ? probe.around(run.bbox) : null;
-        const isDark = local !== null && local < probe.page * 0.72;
+        if (local === null || local >= probe.page * 0.72) return;
 
-        // Sem leitura de pixel sobra a posição: texto curto abaixo da tabela.
-        const belowTable = table ? run.bbox.y0 > table.bottom + lineHeight() : false;
-        if (!isDark && !belowTable) return;
-
-        const box = isDark ? probe.expand(run.bbox, probe.page * 0.72) : { ...run.bbox };
+        const box = probe.expand(run.bbox, probe.page * 0.72);
 
         buttons.push({
           id: app.utils.createId(),
@@ -550,26 +883,48 @@
     return buttons;
   }
 
-  function detectTabs(lines, table) {
-    if (!table) return [];
+  // Linha de caixas de marcação (checkbox/radio) — não é tira de abas.
+  function isCheckboxLine(line, probe) {
+    if (!probe || line.runs.length < 1) return false;
+    const marked = line.runs.filter((run) => probe.hasBoxLeft(run.bbox)).length;
+    return marked >= Math.max(1, Math.ceil(line.runs.length * 0.5));
+  }
 
-    // A tira de abas fica logo acima do cabeçalho da tabela.
-    const candidates = lines.filter(
-      (line) => line.bottom < table.top && table.top - line.bottom < lineHeight() * 2.5
+  function looksLikeTabStrip(line) {
+    if (line.runs.length < 2) return false;
+
+    return line.runs.every((run) => {
+      const text = cleanTitle(run.text);
+      return (
+        text.length >= 4 &&
+        text.length <= 30 &&
+        LABEL_PATTERN.test(text) &&
+        !VALUE_PATTERN.test(text) &&
+        !text.includes(":") &&
+        !/[&@#%]/.test(text)
+      );
+    });
+  }
+
+  // A tira de abas é a primeira faixa do topo com dois ou mais títulos curtos,
+  // antes da área de dados. Antes eu pegava a linha logo acima da tabela, que
+  // numa tela com filtros é a linha dos checkboxes.
+  function detectTabs(lines, table, probe) {
+    const limit = table ? table.top : view.image.naturalHeight;
+
+    const candidate = lines.find(
+      (line) =>
+        line.bottom < limit &&
+        looksLikeTabStrip(line) &&
+        !isCheckboxLine(line, probe)
     );
-    const strip = candidates[candidates.length - 1];
-    if (!strip || strip.runs.length < 2) return [];
 
-    const texts = strip.runs.map((run) => run.text.replace(/[:：]\s*$/, "").trim());
-    const looksLikeTabs = texts.every(
-      (text) => text.length <= 26 && LABEL_PATTERN.test(text) && !VALUE_PATTERN.test(text)
-    );
-    if (!looksLikeTabs) return [];
+    if (!candidate) return [];
 
-    return strip.runs.map((run, index) => ({
+    return candidate.runs.map((run) => ({
       id: app.utils.createId(),
       include: true,
-      title: texts[index],
+      title: cleanTitle(run.text),
       line: toLine(run.bbox.y0, run.bbox.y1 - run.bbox.y0),
       box: { ...run.bbox }
     }));
@@ -584,7 +939,7 @@
     return "";
   }
 
-  function detectFields(lines, table, tabs, buttons) {
+  function detectFields(lines, table, tabs, buttons, probe) {
     const used = new Set();
     const rows = [];
     const consumed = [...buttons, ...tabs].map((item) => item.textBox || item.box);
@@ -592,19 +947,82 @@
     const isConsumed = (run) =>
       consumed.some((box) => run.bbox.x0 === box.x0 && run.bbox.y0 === box.y0);
 
+    // Cabeçalho da janela: a primeira linha é o título e a segunda costuma
+    // ser o caminho, que repete o título. Só isso é descartado — um filtro
+    // acima da tira de abas (como o campo Empresa) continua sendo campo.
+    const flatten = (line) =>
+      line.runs
+        .map((run) => run.text)
+        .join(" ")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+    const tabsTop = tabs.length ? Math.min(...tabs.map((tab) => tab.box.y0)) : null;
+
+    let ceiling = lines.length ? lines[0].bottom : 0;
+    if (lines[1]) {
+      const first = flatten(lines[0]);
+      const second = flatten(lines[1]);
+      const repeats =
+        first.length > 6 && second.length > 6 &&
+        (first.includes(second) || second.includes(first));
+      if (repeats) ceiling = lines[1].bottom;
+    }
+
     lines.forEach((line) => {
       if (table && line.top >= table.top - 2 && line.bottom <= table.bottom + 2) return;
+      if (line.bottom <= ceiling) return;
+      if (table && line.top > table.bottom) return;
+      if (buttons.length && line.top >= Math.min(...buttons.map((button) => button.box.y0)) - 2) return;
 
       const runs = line.runs;
+      // Acima da tira de abas fica o cabeçalho da janela. Só sobrevive o que
+      // tem valor ao lado, que é o caso de um filtro global (ex.: Empresa).
+      // Cabeçalho da janela: título na primeira linha e caminho na segunda.
+      // Um filtro global acima das abas (ex.: Empresa) vem depois disso.
+      const aboveTabs =
+        tabsTop !== null && line.bottom < tabsTop && toLine(line.top, 0) <= 2;
+      const checkboxLine = !aboveTabs && isCheckboxLine(line, probe);
       let index = 0;
 
       while (index < runs.length) {
         const run = runs[index];
         const raw = run.text.trim();
         const endsWithColon = /[:：]\s*$/.test(raw);
-        const text = raw.replace(/[:：]\s*$/, "").trim();
+        const text = cleanTitle(raw);
 
         if (isConsumed(run) || !LABEL_PATTERN.test(text) || VALUE_PATTERN.test(text)) {
+          index += 1;
+          continue;
+        }
+
+        // Texto sobre faixa escura acima da tabela é rótulo de seção.
+        if (probe && probe.around(run.bbox) < probe.page * 0.72) {
+          index += 1;
+          continue;
+        }
+
+        const lineNumber = toLine(run.bbox.y0, run.bbox.y1 - run.bbox.y0);
+
+        // Caixa de marcação: o texto é o próprio campo, sem leitor ao lado.
+        if (checkboxLine) {
+          rows.push({
+            id: app.utils.createId(),
+            include: true,
+            origin: "ocr",
+            description: text,
+            variable: helpers().variableFromDescription(text, used),
+            type: "checkbox",
+            required: false,
+            isKey: false,
+            labelLine: lineNumber,
+            labelColumn: toColumn(run.bbox.x0),
+            labelSize: Math.max(2, toSize(run.bbox.x1 - run.bbox.x0)),
+            inputColumn: toColumn(run.bbox.x1) + 1,
+            inputSize: 10,
+            lookupPreset: "none",
+            box: { ...run.bbox }
+          });
           index += 1;
           continue;
         }
@@ -612,12 +1030,14 @@
         const next = runs[index + 1];
         const following = runs[index + 2];
 
-        // O texto logo depois do label é o conteúdo do leitor quando é um
-        // valor (número, data, código) ou quando o label termina em ":".
         const nextIsValue =
           next && (VALUE_PATTERN.test(next.text.trim()) || endsWithColon);
 
-        // Depois do valor ainda pode vir o display (descrição do código).
+        if (aboveTabs) {
+          index += 1;
+          continue;
+        }
+
         const displayRun =
           nextIsValue &&
           following &&
@@ -635,7 +1055,7 @@
             ? gapTarget.bbox.x0 - labelEnd
             : view.image.naturalWidth - labelEnd;
 
-        const description = text.replace(/\s{2,}/g, " ");
+        const description = text;
         const variable = helpers().variableFromDescription(description, used);
         const sampled = nextIsValue ? typeFromSample(next.text.trim()) : "";
         const type = helpers().inferType(description) || sampled || "string";
@@ -647,19 +1067,16 @@
             ? Math.max(4, Math.min(60, toSize(freeSpace) - 1))
             : helpers().defaultSize(type, description);
 
-        const line1 = toLine(run.bbox.y0, run.bbox.y1 - run.bbox.y0);
-
         rows.push({
           id: app.utils.createId(),
-          // A primeira linha quase sempre é o título da janela, não um campo.
-          include: (nextIsValue || freeSpace > charWidth() * 3) && line1 > 1,
+          include: (nextIsValue || freeSpace > charWidth() * 3) && lineNumber > 1,
           origin: "ocr",
           description,
           variable,
           type,
           required: false,
           isKey: false,
-          labelLine: line1,
+          labelLine: lineNumber,
           labelColumn: toColumn(run.bbox.x0),
           labelSize: Math.max(2, toSize(run.bbox.x1 - run.bbox.x0)),
           inputColumn,
@@ -673,7 +1090,6 @@
           box: { ...run.bbox }
         });
 
-        // Pula o valor e o display: eles não são campos por si só.
         index += 1 + (nextIsValue ? 1 : 0) + (displayRun ? 1 : 0);
       }
     });
@@ -681,34 +1097,70 @@
     return rows;
   }
 
-  function gridFromRegion(table) {
+  function gridFromRegion(table, probe) {
     if (!table) return null;
 
     const used = new Set();
     const line = toLine(table.top, 0);
     const bottom = toLine(table.bottom, 0);
 
+    const columns = table.columns.map((column, index) => {
+      const isCheck = /^(check|sel|marca)/i.test(column.title) || !column.title;
+      const isAction = /^(a[çc][õo]es|editar|excluir|visualizar)$/i.test(column.title);
+
+      return {
+        id: app.utils.createId(),
+        include: true,
+        title: column.title,
+        variable: helpers().variableFromDescription(column.title || `MARCA${index + 1}`, used),
+        type: isCheck ? "checkheader" : column.type,
+        width: column.width,
+        workPiece: 0,
+        recordKey: false,
+        displayOnly: isAction,
+        samples: column.samples || []
+      };
+    });
+
+    // Coluna de marcação sem título: existe quando há um quadradinho desenhado
+    // à esquerda do primeiro valor de cada linha.
+    const firstData = table.dataLines?.[0]?.runs?.[0];
+    if (probe && firstData && probe.hasBoxLeft(firstData.bbox, 10) && columns[0]?.type !== "checkheader") {
+      columns.unshift({
+        id: app.utils.createId(),
+        include: true,
+        title: "",
+        variable: helpers().variableFromDescription("MARCA", used),
+        type: "checkheader",
+        width: 6,
+        workPiece: 0,
+        recordKey: false,
+        displayOnly: true,
+        samples: []
+      });
+    }
+
+    let piece = 0;
+    columns.forEach((column) => {
+      if (column.type === "checkheader") return;
+      piece += 1;
+      column.workPiece = piece;
+    });
+
+    const key =
+      columns.find(
+        (column) =>
+          column.type !== "checkheader" &&
+          /codigo|pedido|numero|\bnum\b|seq|\bid\b|\bop\b|linha/i.test(column.title)
+      ) || columns.find((column) => column.type !== "checkheader");
+
+    if (key) key.recordKey = true;
+
     return {
       include: true,
       line,
       height: Math.max(3, bottom - line + 1),
-      columns: table.columns.map((column, index) => {
-        const isCheck = /^(check|sel|marca)/i.test(column.title);
-        const isAction = /^(a[çc][õo]es|editar|excluir|visualizar)$/i.test(column.title);
-
-        return {
-          id: app.utils.createId(),
-          include: true,
-          title: column.title,
-          variable: helpers().variableFromDescription(column.title || `COLUNA${index + 1}`, used),
-          type: isCheck ? "checkheader" : column.type,
-          width: column.width,
-          workPiece: isCheck ? 0 : index + 1,
-          recordKey: false,
-          displayOnly: isAction,
-          samples: column.samples || []
-        };
-      })
+      columns
     };
   }
 
@@ -723,16 +1175,16 @@
     }
 
     const lines = lineModel();
-    const table = detectTable(lines);
     const probe = backgroundProbe();
+    const table = detectTable(lines);
     const buttons = detectButtons(lines, table, probe);
-    const tabs = detectTabs(lines, table);
+    const tabs = detectTabs(lines, table, probe);
 
     view.table = table;
-    view.grid = gridFromRegion(table);
+    view.grid = gridFromRegion(table, probe);
     view.tabs = tabs;
     view.buttons = buttons;
-    view.rows = detectFields(lines, table, tabs, buttons);
+    view.rows = detectFields(lines, table, tabs, buttons, probe);
   }
 
   // Mantido pelo nome antigo: continua devolvendo só os campos.
@@ -1034,10 +1486,12 @@
           <label class="gpj-img-region-head">
             <input type="checkbox" data-region="buttons" ${view.buttons.some((button) => button.include) ? "checked" : ""}>
             <strong>Botões detectados</strong>
-            <span>${view.buttons
-              .map((button) => `${app.utils.escapeHtml(button.text)} (linha ${button.line})`)
-              .join(" · ")}</span>
+            <span>${view.buttons.map((button) => `linha ${button.line}, coluna ${button.column}`).join(" · ")}</span>
           </label>
+          <input type="text" data-buttons-text value="${app.utils.escapeHtml(
+            view.buttons.map((button) => button.text).join(" | ")
+          )}" style="width:100%;margin-top:6px;padding:4px 6px;border:1px solid #dbe1ea;border-radius:6px;font-size:12.5px">
+          <span style="font-size:11px;opacity:.6">Texto claro sobre fundo escuro nem sempre sai legível no OCR — a posição está certa, corrija os nomes aqui.</span>
         </div>`);
     }
 
@@ -1052,6 +1506,23 @@
         draw();
       })
     );
+
+    const buttonsInput = regionBox.querySelector("[data-buttons-text]");
+    if (buttonsInput) {
+      buttonsInput.addEventListener("change", () => {
+        const texts = buttonsInput.value
+          .split("|")
+          .map((text) => text.trim())
+          .filter(Boolean);
+
+        texts.forEach((text, index) => {
+          if (view.buttons[index]) view.buttons[index].text = text;
+        });
+
+        renderTable();
+        draw();
+      });
+    }
 
     const tabsInput = regionBox.querySelector("[data-tabs-text]");
     if (tabsInput) {
@@ -1813,6 +2284,7 @@
     detectRows,
     analyze,
     detectTable,
+    backgroundProbe,
     calibrateFromWords,
     clusterLines,
     groupRuns,

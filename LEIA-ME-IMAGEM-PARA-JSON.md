@@ -135,3 +135,70 @@ headless de verdade:
 - projeto gerado com `WDOMPV200` + 5 abas + `WDOMPV200TAB1RG` (a RG do grid).
 
 A tela de formulário simples do teste anterior continua saindo igual — nenhum grid falso.
+
+---
+
+## Segunda rodada — testado em print de verdade do ERP
+
+A primeira versão foi calibrada em imagem sintética e errou feio em print real:
+lia a primeira linha de dados como cabeçalho do grid, pegava a linha de checkboxes
+como se fosse a tira de abas, transformava o título da janela em campo e não achava
+nenhum dos botões. O que mudou:
+
+**Cabeçalho do grid.** O bloco de linhas alinhadas encontra o corpo da tabela, mas o
+cabeçalho fica de fora porque tem ícone de filtro e de ordenação picado no meio do texto.
+Agora ele é procurado até três linhas acima (o OCR costuma soltar um fragmento solto entre
+o cabeçalho e a primeira linha) e é promovido quando cobre quase uma coluna por título.
+As colunas que só existem no cabeçalho — sem dado embaixo — também entram, senão dois
+títulos vizinhos caíam na mesma coluna (`Seg. Cálculo Código Regra`).
+
+**Tira de abas.** Antes era "a linha logo acima da tabela", que numa tela com filtros é a
+linha dos checkboxes. Agora é a primeira faixa do topo com dois ou mais títulos curtos,
+descartando linhas que tenham caixa de marcação desenhada à esquerda do texto — isso é
+verificado lendo os pixels ao lado da palavra.
+
+**Botões.** O tesseract não lê texto claro sobre fundo escuro, e é assim que os botões do
+ERP são desenhados: eles simplesmente sumiam. Agora as faixas escuras da tela são achadas
+por varredura de pixel (blocos + preenchimento por conexão), cada uma é recortada,
+invertida, ampliada 4x e lida em modo "linha única". Quando o texto ainda sai ilegível,
+o botão entra como `Botão 1`, `Botão 2` — a posição e a quantidade estão certas e o nome
+é editável na tela.
+
+**Cabeçalho da janela.** Título e caminho (que repete o título) são descartados; um filtro
+global acima das abas, como o campo `Empresa`, continua virando campo.
+
+**Leitura.** Print de tela cheia vem com fonte de 11px; a imagem é ampliada 2x antes do
+OCR (as coordenadas voltam divididas). Isso sozinho já resolveu boa parte do texto picado.
+
+**Calibração.** Acima de 160 colunas estimadas é print web com fonte pequena — cai para as
+108 colunas da janela CSW e as posições continuam proporcionais. A altura da linha nunca
+fica menor que a altura do próprio texto.
+
+**Campos.** O valor ao lado do label vira o conteúdo do leitor e o texto seguinte vira o
+display; uma linha de caixas de marcação vira campos `checkbox`; texto sobre faixa escura
+acima da tabela é rótulo de seção e não vira campo; abaixo da tabela só existe botão.
+
+### Resultado nos dois prints reais
+
+`Liberação de Usuário para o Camanuf` (1841x694):
+
+```
+2 abas: Liberação Acesso Usuário [grid, 8 colunas] · Autorização de Acesso Usuário
+grid: Linha(n) · Descrição · Situação · E-mail · Convite Enviado · Data Envio(d) · Status · Último Acesso(d)
+campos: Inativo (checkbox) · Ativo (checkbox)
+botões: 3, nas colunas 2, 28 e 53 da linha 30
+gera: WDOMLIB010 + WDOMLIB010TAB1 + WDOMLIB010TAB2 + WDOMLIB010RG + WDOMLIB010TAB1RG
+```
+
+`Monitor de Regra Comercial` (1848x900):
+
+```
+5 abas: Regra Gerais · Regra Exceção · Geral · Catálogo · Tipo de Nota
+grid com 9 colunas: Ações · Editar · Seq. Cálculo(n) · Código Regra · Descrição · Situação
+                    · Tipo · Data Início(d) · Data Fim
+campo: Empresa, com display para a razão social
+botões: 2, nas colunas 2 e 15
+```
+
+O que continua manual: o nome dos botões quando o OCR não consegue ler, a chave da global
+e a tabela de opções dos checkboxes — o validador aponta os três.
