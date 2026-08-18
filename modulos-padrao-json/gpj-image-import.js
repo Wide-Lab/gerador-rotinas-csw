@@ -446,10 +446,19 @@
    * monte de campo picado e a tira de abas se perde.
    * ------------------------------------------------------------------ */
 
-  function lineModel() {
+  function lineModel(area) {
     const gap = charWidth() * 2.2;
+    const words = area
+      ? view.words.filter(
+          (word) =>
+            word.bbox.x0 >= area.left - 4 &&
+            word.bbox.x1 <= area.right + 4 &&
+            word.bbox.y0 >= area.top - 4 &&
+            word.bbox.y1 <= area.bottom + 4
+        )
+      : view.words;
 
-    return clusterLines(view.words)
+    return clusterLines(words)
       .map((lineWords, index) => {
         const runs = groupRuns(lineWords, gap).filter((run) => !NOISE_PATTERN.test(run.text));
         const tops = runs.map((run) => run.bbox.y0);
@@ -494,6 +503,15 @@
       start: Math.min(...cluster.items),
       count: cluster.items.length
     }));
+  }
+
+  // Nome da coluna quando não há linha de dados para olhar (tabela vazia).
+  function columnTypeFromTitle(title) {
+    const name = String(title || "").toLowerCase();
+    if (/data|dt|previs|vencim|emiss|entrega/.test(name)) return "d";
+    if (/quantidade|qtd|valor|preco|preço|percent|perc.|%|saldo|peso|agio|ágio/.test(name)) return "v3";
+    if (/codigo|código|numero|número|num|seq|linha|op|pedido/.test(name)) return "n";
+    return "a";
   }
 
   function columnTypeFromValues(values) {
@@ -712,6 +730,107 @@
           return lightest - darkest > 60 && darkest < page * 0.7;
         },
 
+        // Linhas desenhadas: bordas de tabela, divisórias de cabeçalho.
+        rules(threshold = 22) {
+          if (this._rules) return this._rules;
+
+          const found = [];
+          for (let y = 0; y < off.height; y += 1) {
+            let best = 0;
+            let run = 0;
+            let start = 0;
+            let bestStart = 0;
+
+            for (let x = 0; x < off.width; x += 2) {
+              if (Math.abs(luminance(x, y) - page) > threshold) {
+                if (run === 0) start = x;
+                run += 2;
+                if (run > best) {
+                  best = run;
+                  bestStart = start;
+                }
+              } else {
+                run = 0;
+              }
+            }
+
+            if (best > off.width * 0.4) found.push({ y, length: best, x0: bestStart });
+          }
+
+          // Borda de 2px vira duas linhas; junta o que está colado.
+          const grouped = [];
+          found.forEach((rule) => {
+            const last = grouped[grouped.length - 1];
+            if (last && rule.y - last.y <= 3) {
+              last.y = rule.y;
+              last.length = Math.max(last.length, rule.length);
+              return;
+            }
+            grouped.push({ ...rule });
+          });
+
+          this._rules = grouped;
+          return grouped;
+        },
+
+        // Separadores verticais dentro de uma faixa.
+        verticalRules(y0, y1, threshold = 14) {
+          const height = Math.max(1, y1 - y0);
+          const found = [];
+
+          for (let x = 0; x < off.width; x += 1) {
+            let count = 0;
+            for (let y = y0; y <= y1; y += 2) {
+              if (Math.abs(luminance(x, y) - page) > threshold) count += 2;
+            }
+            if (count > height * 0.5) found.push(x);
+          }
+
+          const grouped = [];
+          found.forEach((x) => {
+            const last = grouped[grouped.length - 1];
+            if (last !== undefined && x - last <= 3) {
+              grouped[grouped.length - 1] = x;
+              return;
+            }
+            grouped.push(x);
+          });
+
+          return grouped;
+        },
+
+        // Claridade média de uma faixa da tela.
+        averageLuminance(y0, y1, x0, x1) {
+          let total = 0;
+          let count = 0;
+
+          for (let y = Math.max(0, y0); y <= Math.min(off.height - 1, y1); y += 2) {
+            for (let x = Math.max(0, x0); x <= Math.min(off.width - 1, x1); x += 4) {
+              total += luminance(x, y);
+              count += 1;
+            }
+          }
+
+          return count ? total / count : page;
+        },
+
+        // Barra lateral escura do ERP à esquerda do conteúdo.
+        darkColumn(limit) {
+          let last = 0;
+
+          for (let x = 0; x < limit; x += 2) {
+            let dark = 0;
+            let total = 0;
+            for (let y = 0; y < off.height; y += 6) {
+              total += 1;
+              if (luminance(x, y) < page * 0.65) dark += 1;
+            }
+            if (total && dark / total > 0.6) last = x;
+          }
+
+          return last;
+        },
+
         // Retângulos escuros da tela — em geral os botões.
         darkBands(threshold) {
           const blockX = 8;
@@ -829,6 +948,182 @@
     }
   }
 
+  /* Linhas desenhadas da tela: é o que permite achar a tabela quando ela está
+     vazia (só cabeçalho) e recortar a área útil de um print com o navegador
+     inteiro. */
+  function ruleReader(probe) {
+    if (!probe || typeof probe.rules !== "function") return null;
+    return probe;
+  }
+
+  // Área útil: sem a barra lateral escura do ERP e sem as barras do navegador.
+  function usableArea(probe) {
+    const width = view.image.naturalWidth;
+    const height = view.image.naturalHeight;
+    const area = { left: 0, top: 0, right: width, bottom: height };
+
+    if (!probe) return area;
+
+    const sidebar = probe.darkColumn(width * 0.2);
+    if (sidebar <= 4) {
+      // Sem barra lateral não é print de navegador: nada a recortar, e cortar
+      // por engano some com os filtros do topo da tela.
+      return area;
+    }
+
+    area.left = sidebar + 2;
+
+    // A divisória que atravessa a tela inteira, na parte de cima, separa o
+    // cabeçalho do navegador/ERP do conteúdo da rotina.
+    // A divisória do navegador/ERP nasce na coluna zero e atravessa a tela
+    // inteira; a borda de uma tabela começa depois da margem do conteúdo.
+    const full = probe
+      .rules()
+      .filter((rule) => rule.x0 <= 2 && rule.length >= width * 0.98 && rule.y < height * 0.3);
+
+    if (full.length) area.top = full[full.length - 1].y + 2;
+
+    return area;
+  }
+
+  // Tabela pelas bordas: duas horizontais próximas formam a faixa do cabeçalho
+  // e a próxima horizontal longa fecha a área de dados.
+  function detectTableByRules(lines, probe, area) {
+    if (!probe) return null;
+
+    const rules = probe
+      .rules()
+      .filter((rule) => rule.y > area.top && rule.length >= (area.right - area.left) * 0.5);
+
+    if (rules.length < 3) return null;
+
+    const lh = lineHeight();
+
+    const candidates = [];
+
+    for (let index = 0; index < rules.length - 1; index += 1) {
+      const top = rules[index];
+      const headerBottom = rules[index + 1];
+      const gap = headerBottom.y - top.y;
+
+      if (gap < lh * 0.5 || gap > lh * 2.2) continue;
+
+      // Fim da tabela: a última borda longa da sequência, não a próxima.
+      const end = rules[rules.length - 1];
+      if (end.y <= headerBottom.y + lh * 1.2) continue;
+
+      const headerShade = probe.averageLuminance(top.y + 2, headerBottom.y - 2, area.left, area.right);
+      const bodyShade = probe.averageLuminance(
+        headerBottom.y + 2,
+        Math.min(end.y - 2, headerBottom.y + gap),
+        area.left,
+        area.right
+      );
+
+      candidates.push({
+        top,
+        headerBottom,
+        end,
+        area: end.y - headerBottom.y,
+        contrast: bodyShade - headerShade
+      });
+    }
+
+    // Primeiro os que têm cara de cabeçalho; entre eles, o de maior área.
+    const shaded = candidates.filter((candidate) => candidate.contrast > 2);
+    const ordered = (shaded.length ? shaded : candidates).sort((a, b) => b.area - a.area);
+    candidates.length = 0;
+    candidates.push(...ordered);
+
+    for (const candidate of candidates) {
+      const { top, headerBottom, end } = candidate;
+
+      const headerLines = lines.filter(
+        (line) => line.top >= top.y - 6 && line.bottom <= headerBottom.y + 8
+      );
+      if (!headerLines.length) continue;
+
+      const headerRuns = headerLines
+        .flatMap((line) => line.runs)
+        .sort((a, b) => a.bbox.x0 - b.bbox.x0);
+
+      const header = {
+        runs: headerRuns,
+        top: Math.min(...headerLines.map((line) => line.top)),
+        bottom: Math.max(...headerLines.map((line) => line.bottom))
+      };
+
+      if (header.runs.length < 3) continue;
+
+      const dataLines = lines.filter(
+        (line) => line.top > headerBottom.y + 2 && line.bottom < end.y
+      );
+
+      // Separadores de coluna: dentro do cabeçalho eles sempre existem, mesmo
+      // com a tabela vazia.
+      const verticals = probe
+        .verticalRules(top.y + 2, headerBottom.y - 2)
+        .filter((x) => x >= area.left && x <= area.right);
+
+      const bounds =
+        verticals.length >= 3
+          ? verticals
+          : header.runs.map((run) => run.bbox.x0 - charWidth() * 0.5);
+
+      const right = Math.min(area.right, Math.max(...bounds, header.runs[header.runs.length - 1].bbox.x1));
+
+      const columns = bounds
+        .map((start, position) => {
+          const limit = bounds[position + 1] !== undefined ? bounds[position + 1] : right;
+          if (limit - start < charWidth() * 1.5) return null;
+
+          const words = header.runs
+            .flatMap((run) => run.words || [run])
+            .filter(
+              (word) =>
+                word.bbox.x0 >= start - charWidth() * 0.6 &&
+                word.bbox.x0 < limit - charWidth() * 0.3 &&
+                !ORNAMENT_PATTERN.test(word.text)
+            )
+            .sort((a, b) => a.bbox.x0 - b.bbox.x0);
+
+          const values = dataLines
+            .map((line) =>
+              line.runs.find((run) => run.bbox.x0 >= start - charWidth() && run.bbox.x0 < limit)
+            )
+            .filter(Boolean)
+            .map((run) => run.text);
+
+          return {
+            title: cleanTitle(words.map((word) => word.text).join(" ")),
+            start,
+            width: Math.max(3, toSize(limit - start) - 1),
+            type: values.length
+              ? columnTypeFromValues(values)
+              : columnTypeFromTitle(cleanTitle(words.map((word) => word.text).join(" "))),
+            samples: values.slice(0, 3)
+          };
+        })
+        .filter(Boolean);
+
+      if (columns.length < 2) continue;
+
+      return {
+        lines: [header, ...dataLines],
+        header,
+        dataLines,
+        top: top.y,
+        bottom: end.y,
+        left: Math.min(...bounds),
+        right,
+        columns,
+        fromRules: true
+      };
+    }
+
+    return null;
+  }
+
   function detectButtons(lines, table, probe) {
     const floor = table ? table.bottom : view.image.naturalHeight * 0.5;
     const readings = Array.isArray(view.darkTexts) ? view.darkTexts : [];
@@ -836,8 +1131,12 @@
     // Caminho principal: cada faixa escura abaixo da área de dados é um botão,
     // com o texto lido no passe ampliado.
     if (readings.length) {
+      const insideTable = (band) =>
+        table && band.y0 >= table.top - 4 && band.y1 <= table.bottom + 4;
+
       return readings
-        .filter((reading) => reading.band.y0 >= floor)
+        .filter((reading) => !insideTable(reading.band))
+        .filter((reading) => toSize(reading.band.x1 - reading.band.x0) >= 8)
         .map((reading) => ({
           id: app.utils.createId(),
           include: true,
@@ -973,7 +1272,7 @@
       if (table && line.top >= table.top - 2 && line.bottom <= table.bottom + 2) return;
       if (line.bottom <= ceiling) return;
       if (table && line.top > table.bottom) return;
-      if (buttons.length && line.top >= Math.min(...buttons.map((button) => button.box.y0)) - 2) return;
+
 
       const runs = line.runs;
       // Acima da tira de abas fica o cabeçalho da janela. Só sobrevive o que
@@ -1104,8 +1403,11 @@
     const line = toLine(table.top, 0);
     const bottom = toLine(table.bottom, 0);
 
-    const columns = table.columns.map((column, index) => {
-      const isCheck = /^(check|sel|marca)/i.test(column.title) || !column.title;
+    const columns = table.columns
+      // Sobra de borda no fim da tabela não é coluna.
+      .filter((column, index, list) => column.title || index === 0 || index < list.length - 1)
+      .map((column, index) => {
+      const isCheck = /^(check|sel|marca)/i.test(column.title) || (!column.title && index === 0);
       const isAction = /^(a[çc][õo]es|editar|excluir|visualizar)$/i.test(column.title);
 
       return {
@@ -1174,9 +1476,14 @@
       return;
     }
 
-    const lines = lineModel();
     const probe = backgroundProbe();
-    const table = detectTable(lines);
+    const area = usableArea(probe);
+    view.area = area;
+
+    const lines = lineModel(area);
+    // O alinhamento do texto resolve a tabela com dados; as bordas desenhadas
+    // entram quando a tabela está vazia e só tem cabeçalho.
+    const table = detectTable(lines) || detectTableByRules(lines, probe, area);
     const buttons = detectButtons(lines, table, probe);
     const tabs = detectTabs(lines, table, probe);
 

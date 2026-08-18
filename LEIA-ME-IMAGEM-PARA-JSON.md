@@ -202,3 +202,45 @@ botões: 2, nas colunas 2 e 15
 
 O que continua manual: o nome dos botões quando o OCR não consegue ler, a chave da global
 e a tabela de opções dos checkboxes — o validador aponta os três.
+
+---
+
+## Terceira rodada — grid vazio e print do navegador inteiro
+
+A tela `Configurar Ágio de Material no Período` trouxe dois casos que ainda quebravam:
+a tabela estava **vazia** (só o cabeçalho, `0 registro(s)`) e o print era do **navegador
+inteiro**, com barra de endereço, favoritos e o menu lateral do ERP.
+
+**Tabela pelas bordas desenhadas.** Sem linha de dados não há o que alinhar, então o
+módulo passou a ler as linhas horizontais e verticais desenhadas na imagem. Duas
+horizontais próximas formam a faixa do cabeçalho e a última fecha a área de dados; os
+separadores verticais dentro do cabeçalho dão o limite de cada coluna. Na tela do Ágio
+isso devolve exatamente as sete colunas, e o tipo vem do nome quando não há valor para
+olhar: `Data Início`/`Data Fim` → data, `Perc. Ágio(%)` → decimal.
+
+Esse caminho é o **plano B**: o alinhamento de texto continua sendo o primeiro, porque
+numa tabela com dados ele acerta mais (a tabela do ERP desenha borda em cada linha, e
+as bordas sozinhas confundiriam a primeira linha de dados com o cabeçalho).
+
+**Área útil.** Quando existe uma barra lateral escura — sinal de print do navegador — a
+imagem é recortada: fora a barra lateral e tudo acima da divisória que atravessa a tela
+inteira. Sem barra lateral nada é recortado, senão os filtros do topo (o campo `Empresa`)
+sumiriam.
+
+**Botões fora da tabela.** Antes só valia o que estava abaixo do grid; os botões de ação
+que ficam ao lado dos filtros (`Consultar`, `Limpar`, `Cadastro de Parâmetro`) eram
+ignorados. Agora vale qualquer faixa escura fora da área da tabela, com pelo menos 8
+caracteres de largura — isso descarta rótulo de seção com fundo escuro, que é curto.
+E um botão na mesma linha de um campo não apaga mais o campo.
+
+### Resultado nas três telas reais
+
+| tela | grid | abas | botões | campos |
+|---|---|---|---|---|
+| Configurar Ágio (vazia, print do navegador) | 7 colunas, tipos certos | — | 5 | Empresa, Item, filtro de vigência |
+| Liberação de Usuário (Camanuf) | 8 colunas | 2, corretas | 3 | Inativo, Ativo (checkbox) |
+| Monitor de Regra Comercial | 9 colunas | 5, corretas | 3 | Empresa com display |
+
+A tela do Ágio gera `WDOMAGI010` em modo *Consulta com Grid*, com o fluxo
+`Limpar^%CSW1GRID` → `GerarGrid^WDOMAGI010RG` → `Movimentar^%CSW1GRID`, e passa no
+validador sem nenhum apontamento.
