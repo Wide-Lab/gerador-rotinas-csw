@@ -306,7 +306,7 @@
               : booleanValue(grid.consultButton ?? grid.useConsultButton ?? grid.gridUseConsultButton, true),
           gridConsultButtonColumn: numberValue(
             grid.consultButton?.column ?? grid.consultButtonColumn ?? grid.gridConsultButtonColumn,
-            50
+            86
           ),
           gridConsultButtonLine: numberValue(
             grid.consultButton?.line ?? grid.consultButtonLine ?? grid.gridConsultButtonLine,
@@ -579,7 +579,7 @@
       );
       result.settings.gridConsultButtonColumn = numberValue(
         result.settings.gridConsultButtonColumn ?? result.settings.consultButtonColumn,
-        50
+        86
       );
       result.settings.gridConsultButtonLine = numberValue(
         result.settings.gridConsultButtonLine ?? result.settings.consultButtonLine,

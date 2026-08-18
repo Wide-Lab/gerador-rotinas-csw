@@ -359,3 +359,33 @@ escrita à mão usa `Csv=^Material`, `Csv=^Data Início`. Agora o gerador emite 
 
 **Botão Consultar não desce.** O empurrão para baixo do grid vale só para botões que caem
 dentro da faixa dele; `Consultar` e `Limpar`, que ficam acima, continuam na linha original.
+
+---
+
+## Oitava rodada — marcar opções à mão, grid que não come botão e rótulo limpo
+
+**Modo "Opções (radio)" no traçado manual.** O seletor *Marcar como* ganhou uma opção:
+arraste sobre o grupo inteiro (as bolinhas e os textos) e sai **um campo radio** com a
+tabela de opções montada. Se os marcadores não forem reconhecidos, cada palavra da área
+vira uma opção — melhor um grupo para corrigir do que nada.
+
+Testado marcando a área `Vigente / Não Vigente / Todos` da tela do Ágio: cria
+`Opção (radio)` com as três opções.
+
+**O nome do campo fica esperando você.** Depois de marcar um campo (ou um grupo de
+opções), o cursor vai direto para a coluna **Campo** da nova linha, com o texto
+selecionado. Quando o OCR não lê o rótulo, é só digitar por cima.
+
+**O grid parava em cima dos botões.** No print o grid parece ir até o rodapé, mas a barra
+de botões vem logo abaixo — e o componente ainda desenha a navegação dele. Agora a altura
+do grid é cortada para deixar três linhas livres antes do primeiro botão que estiver
+abaixo dele. Na tela do Ágio a janela fechou em 108x24 (a rotina real usa 108x27), com o
+grid na linha 3 e os botões na 22, sem sobreposição.
+
+**`Empresa[` virou `Empresa`.** A borda vermelha do campo obrigatório é lida como `[` ou
+`|` colado no rótulo, e o valor às vezes vem grudado (`Empresa[22`). O nome do campo agora
+é só a parte de texto; colchete, chave e barra soltos são removidos das pontas, e
+parêntese só cai quando está desemparelhado — `Perc. Ágio(%)` continua inteiro.
+
+**Botão Consultar.** Faltava um lugar: o importador de JSON simples também tinha a coluna
+50 fixa. Agora o padrão é 86 em todos os caminhos.

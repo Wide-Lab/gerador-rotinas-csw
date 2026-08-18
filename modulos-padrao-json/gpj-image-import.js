@@ -533,12 +533,22 @@
   }
 
   function cleanTitle(text) {
-    return String(text || "")
+    let result = String(text || "")
       .replace(/[:：]\s*$/, "")
       .replace(/^[-=~^v«»|_.\s]+/, "")
       .replace(/[-=~^v«»|_.\s]+$/, "")
       .replace(/\s{2,}/g, " ")
       .trim();
+
+    // A borda vermelha do campo obrigatório vira "[" ou "|" colado no rótulo.
+    result = result.replace(/[\[\]{}|]+$/, "").replace(/^[\[\]{}|]+/, "").trim();
+
+    // Parêntese sozinho também é resto de desenho, mas "Perc. Ágio(%)" é nome.
+    const abre = (result.match(/\(/g) || []).length;
+    const fecha = (result.match(/\)/g) || []).length;
+    if (abre !== fecha) result = result.replace(/[()]/g, "").trim();
+
+    return result;
   }
 
   // O maior bloco de linhas alinhadas em coluna é o corpo da tabela. O
@@ -1581,7 +1591,10 @@
             ? gapTarget.bbox.x0 - labelEnd
             : view.image.naturalWidth - labelEnd;
 
-        const description = text;
+        // "Empresa[22": o OCR cola o valor no rótulo (a borda do campo vira
+        // um "["). O nome do campo é só a parte de texto.
+        const glued = text.match(/^(.*[A-Za-zÀ-ÿ])[^A-Za-z0-9]*\d+$/);
+        const description = glued ? cleanTitle(glued[1]) : text;
         const variable = helpers().variableFromDescription(description, used);
         const sampled = nextIsValue ? typeFromSample(next.text.trim()) : "";
         const type = helpers().inferType(description) || sampled || "string";
@@ -2370,6 +2383,19 @@
     }
   }
 
+  // Leva o cursor para o nome do último campo criado.
+  function focusLastRow() {
+    if (!tableBox) return;
+
+    const inputs = tableBox.querySelectorAll('input[data-img-property="description"]');
+    const last = inputs[inputs.length - 1];
+    if (!last) return;
+
+    last.scrollIntoView({ block: "nearest" });
+    last.focus();
+    last.select();
+  }
+
   function bindCanvas() {
     let start = null;
 
@@ -2430,6 +2456,66 @@
             ? `Grid marcado na linha ${view.grid.line} com ${view.grid.columns.length} coluna(s).`
             : `Área do grid marcada na linha ${view.grid.line}. Rode o OCR para tirar as colunas do cabeçalho.`
         );
+        return;
+      }
+
+      if (view.mode === "opcoes") {
+        const inside = view.words.filter(
+          (word) =>
+            word.bbox.x0 >= box.x0 - 4 &&
+            word.bbox.x1 <= box.x1 + 4 &&
+            word.bbox.y0 >= box.y0 - 6 &&
+            word.bbox.y1 <= box.y1 + 6
+        );
+
+        const probe = backgroundProbe();
+        const group = markerGroup({ runs: inside, top: box.y0, bottom: box.y1 }, probe);
+
+        // Sem marcador reconhecido, cada palavra da área vira uma opção.
+        const options = group
+          ? group.options.map((option) => option.text)
+          : inside
+              .sort((a, b) => a.bbox.x0 - b.bbox.x0)
+              .map((word) => cleanTitle(word.text))
+              .filter((text) => /[A-Za-zÀ-ÿ]{2,}/.test(text));
+
+        if (options.length < 2) {
+          setStatus("Não consegui separar as opções nessa área. Tente marcar só as opções.");
+          draw();
+          return;
+        }
+
+        const used = new Set(view.rows.map((row) => row.variable));
+        const variable = helpers().variableFromDescription("opcao", used);
+
+        view.rows.push({
+          id: app.utils.createId(),
+          include: true,
+          origin: "manual",
+          description: "Opção",
+          variable,
+          type: "radio",
+          required: false,
+          isKey: false,
+          labelLine: toLine(box.y0, box.y1 - box.y0),
+          labelColumn: Math.max(1, toColumn(box.x0) - 8),
+          labelSize: 7,
+          inputColumn: toColumn(box.x0),
+          inputSize: Math.max(10, toSize(box.x1 - box.x0)),
+          optionsVariable: `TAB${variable}`.slice(0, 20),
+          createOptionsTable: true,
+          optionsItems: options.map((text, position) => ({
+            value: String(position),
+            description: text || `Opção ${position + 1}`
+          })),
+          lookupPreset: "none",
+          box
+        });
+
+        renderTable();
+        draw();
+        focusLastRow();
+        setStatus(`Grupo de opções criado com ${options.length} opções. Ajuste o nome ao lado.`);
         return;
       }
 
@@ -2506,7 +2592,10 @@
 
       renderTable();
       draw();
-      setStatus(`Campo "${row.description}" adicionado. Marque o próximo label.`);
+      focusLastRow();
+      setStatus(
+        `Campo "${row.description}" adicionado — escreva o nome dele ao lado se o texto não saiu certo.`
+      );
     });
   }
   function gridDefinition(routineName, location) {
@@ -2516,7 +2605,15 @@
     if (!columns.length) return null;
 
     const line = Math.max(1, view.grid.line);
-    const height = Math.max(3, view.grid.height);
+
+    // Deixa três linhas livres antes do primeiro botão que estiver abaixo do
+    // grid: é onde o componente desenha a barra de navegação.
+    const below = view.buttons
+      .filter((button) => button.include && button.line > line)
+      .map((button) => button.line);
+
+    const limit = below.length ? Math.min(...below) - line - 2 : Infinity;
+    const height = Math.max(3, Math.min(view.grid.height, limit));
 
     return {
       location,
@@ -2726,6 +2823,7 @@
                   <select data-img-mode>
                     <option value="campo">Campo (label + leitor)</option>
                     <option value="grid">Grid</option>
+                    <option value="opcoes">Opções (radio)</option>
                     <option value="aba">Aba</option>
                     <option value="botao">Botão</option>
                   </select>
@@ -2862,7 +2960,9 @@
         setStatus(
           view.mode === "grid"
             ? "Arraste sobre a área da tabela para marcar o grid."
-            : view.mode === "aba"
+            : view.mode === "opcoes"
+              ? "Arraste sobre todas as opções do grupo (as bolinhas e os textos)."
+              : view.mode === "aba"
               ? "Arraste sobre o texto de cada aba."
               : view.mode === "botao"
                 ? "Arraste sobre cada botão."
