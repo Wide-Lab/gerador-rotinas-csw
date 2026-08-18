@@ -65,7 +65,7 @@
     [/multi.?selec|multi.?sele|multipla escolha|varios/, "multiSelect"],
     [/text.?area|memo|texto longo|texto grande|observac/, "textArea"],
     [/mes.?ano|competencia/, "monthYear"],
-    [/\bdata\b|\bdate\b|dt\b/, "date"],
+    [/\bdata\b|\bdate\b|dt\b|periodo|vigencia|emissao|entrega/, "date"],
     [/checkbox|check|sim.?nao|flag|booleano|logico/, "checkbox"],
     [/radio/, "radio"],
     [/combo|lista|selec|dominio|opcoes|situacao|status/, "combo"],
