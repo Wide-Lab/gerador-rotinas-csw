@@ -167,3 +167,24 @@ grid na linha 5, altura 16, ^mtempWDWDNEW010, 9 colunas:
 Manutenção -> btnManter (linha 21) · Gerar Planejamento · Inclusão Engenharia · +
 validador: nenhum problema encontrado
 ```
+
+---
+
+## Terceira rodada — grid sobre os botões e botão de consulta
+
+**O grid comia a barra de botões.** No desenho o grid vai até quase encostar nos botões,
+e o componente do CSW ainda desenha a navegação embaixo dele — o resultado era a barra de
+botões escondida atrás do grid. Agora a altura é cortada para deixar duas linhas livres
+antes do primeiro botão que estiver abaixo.
+
+No JSON de `WDWDNEW015`: o grid passou de `Altura=18` (indo até a linha 21, com os botões
+na 22) para `Altura=16`, terminando na linha 19.
+
+**Botão de consulta só quando existe no desenho.** Toda rotina de *Consulta com Grid*
+ganhava o `btnConsultar` automaticamente, mesmo quando o desenho não tinha nenhum botão de
+consulta — e a tela saía com um "Consultar / Limpar" que não foi pedido. Agora ele só é
+gerado quando o desenho (ou o print) traz um botão chamado *Consultar*, *Pesquisar*,
+*Limpar* ou *Filtrar*; e nesse caso a posição vem do próprio desenho.
+
+Esses mesmos botões também deixaram de virar botões personalizados — antes o `Consultar`
+aparecia duas vezes na tela.

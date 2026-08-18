@@ -320,6 +320,8 @@
     });
   }
 
+  const CONSULT_PATTERN = /^(consultar?|pesquisar?|limpar|filtrar)$/i;
+
   function helpersFor() {
     return (
       (app.specImport && app.specImport.helpers) || {
@@ -557,9 +559,24 @@
 
     const gridLocation = documentTabs.length ? documentTabs[0].id : "parent";
 
+    const maintenance = buttons.find((button) => /manuten/i.test(button.text));
+    const consult = buttons.filter((button) => CONSULT_PATTERN.test(button.text.trim()));
+    const extraButtons = buttons.filter(
+      (button) => button !== maintenance && !consult.includes(button)
+    );
+
+    // Primeiro botão que aparece abaixo de cada grid.
+    const buttonLines = buttons.map((button) => toLine(button.y));
+
     const documentGrids = grids.map((grid, index) => {
       const line = toLine(grid.y);
-      const height = Math.max(3, Math.round(grid.height / cellHeight));
+      const below = buttonLines.filter((buttonLine) => buttonLine > line);
+      const limit = below.length ? Math.min(...below) - line - 2 : Infinity;
+
+      const height = Math.max(
+        3,
+        Math.min(Math.round(grid.height / cellHeight), limit)
+      );
       const gridColumns = normalizeGridColumns(
         grid.columns,
         cellWidth,
@@ -587,14 +604,16 @@
         gridLineStart: line,
         gridLineEnd: line + height - 1,
         gridNavigation: 1,
+        // Sem botão de consulta no desenho, não gera o btnConsultar.
+        gridUseConsultButton: consult.length > 0,
+        gridConsultButtonColumn: consult.length ? toColumn(consult[0].x) : 86,
+        gridConsultButtonLine: consult.length ? toLine(consult[0].y) : 1,
         gridWorkGlobal: `mtemp${routineName}`.slice(0, 31),
         gridCheckGlobal: `mtemp${routineName}CHECK`.slice(0, 31),
         columns: gridColumns
       };
     });
 
-    const maintenance = buttons.find((button) => /manuten/i.test(button.text));
-    const extraButtons = buttons.filter((button) => button !== maintenance);
 
     // Nada de botão dentro da faixa do grid: ele fica escondido atrás.
     const gridFloor = documentGrids.length
@@ -638,6 +657,8 @@
         rgRoutineName: `${routineName}RG`,
         entityName: title,
         globalName: routineName,
+        // Sem botão de consulta no desenho, a tela não ganha o btnConsultar.
+
         width: columns,
         height: Math.max(
           20,

@@ -1971,6 +1971,14 @@
     .gpj-img-toolbar button.active { background: #1e293b; border-color: #1e293b; color: #fff; }
     .gpj-img-hint { font-size: 12px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
       border-radius: 8px; padding: 7px 10px; margin-bottom: 8px; }
+    .gpj-img-ask { display: none; gap: 6px; align-items: center; flex-wrap: wrap;
+      background: #fefce8; border: 1px solid #fde68a; border-radius: 8px;
+      padding: 7px 10px; margin-bottom: 8px; font-size: 12.5px; }
+    .gpj-img-ask.on { display: flex; }
+    .gpj-img-ask strong { margin-right: 4px; }
+    .gpj-img-ask button { border: 1px solid #d5dbe6; background: #fff; border-radius: 999px;
+      padding: 4px 12px; font-size: 12px; cursor: pointer; }
+    .gpj-img-ask button:hover { background: #f1f5f9; }
     .gpj-img-table { border: 1px solid #e5e9f0; border-radius: 10px; overflow: auto; max-height: 42vh; }
     .gpj-img-table.inner { max-height: 220px; margin-top: 6px; }
     .gpj-img-regions { margin-bottom: 10px; }
@@ -1999,6 +2007,7 @@
   let progressBar = null;
   let tableBox = null;
   let regionBox = null;
+  let askBox = null;
   let stage = null;
 
   function injectStyle() {
@@ -2383,6 +2392,11 @@
     }
   }
 
+  // Mostra a pergunta do tipo para o campo recém-marcado.
+  function askType() {
+    if (askBox) askBox.classList.add("on");
+  }
+
   // Leva o cursor para o nome do último campo criado.
   function focusLastRow() {
     if (!tableBox) return;
@@ -2593,12 +2607,13 @@
       renderTable();
       draw();
       focusLastRow();
+      askType();
       setStatus(
-        `Campo "${row.description}" adicionado — escreva o nome dele ao lado se o texto não saiu certo.`
+        `Campo "${row.description}" adicionado — diga o que é e escreva o nome dele ao lado.`
       );
     });
   }
-  function gridDefinition(routineName, location) {
+  function gridDefinition(routineName, location, consulta = []) {
     if (!view.grid || !view.grid.include) return null;
 
     const columns = view.grid.columns.filter((column) => column.include);
@@ -2623,6 +2638,10 @@
       gridLineStart: line,
       gridLineEnd: line + height - 1,
       gridNavigation: 1,
+      // Sem botão de consulta na tela, não faz sentido gerar o btnConsultar.
+      gridUseConsultButton: consulta.length > 0,
+      gridConsultButtonColumn: consulta.length ? consulta[0].column : 86,
+      gridConsultButtonLine: consulta.length ? consulta[0].line : 1,
       gridWorkGlobal: `mtemp${routineName}`.slice(0, 31),
       gridCheckGlobal: `mtemp${routineName}CHECK`.slice(0, 31),
       columns: columns.map((column, index) => ({
@@ -2653,7 +2672,7 @@
     // Com tira de abas, o grid mora dentro da primeira aba — é assim que a
     // tela do ERP se organiza. Sem abas, o grid fica na rotina principal.
     const gridLocation = tabs.length ? "aba1" : "parent";
-    const grid = gridDefinition(routineName, gridLocation);
+    const grid = gridDefinition(routineName, gridLocation, consulta);
 
     const documentTabs = tabs.map((tab, index) => ({
       id: `aba${index + 1}`,
@@ -2666,7 +2685,13 @@
     }));
 
     const manutencao = buttons.find((button) => /manuten/i.test(button.text));
-    const extraButtons = buttons.filter((button) => button !== manutencao);
+    // O botão de consulta é gerado pela própria tela; não vira personalizado.
+    const consulta = buttons.filter((button) =>
+      /^(consultar?|pesquisar?|limpar|filtrar)$/i.test(button.text.trim())
+    );
+    const extraButtons = buttons.filter(
+      (button) => button !== manutencao && !consulta.includes(button)
+    );
 
     // O grid ocupa a faixa dele inteira (inclusive o rodapé de navegação); um
     // botão dentro dessa faixa fica escondido atrás do grid.
@@ -2690,6 +2715,7 @@
         rgRoutineName: `${routineName}RG`,
         entityName: title,
         globalName: routineName,
+
         width: view.calibration.columns,
         // A janela começa na primeira linha útil e precisa caber o que ficou
         // embaixo do grid.
@@ -2832,6 +2858,17 @@
                 <label>Linhas <input type="number" min="8" max="80" data-img-lines value="28"></label>
                 <button type="button" data-img-calibrate>Calibrar pelo texto</button>
               </div>
+              <div class="gpj-img-ask">
+                <strong>O que você marcou?</strong>
+                <button type="button" data-ask="string">Texto</button>
+                <button type="button" data-ask="integer">Número</button>
+                <button type="button" data-ask="date">Data</button>
+                <button type="button" data-ask="decimal">Decimal</button>
+                <button type="button" data-ask="combo">Combo</button>
+                <button type="button" data-ask="radio">Radio</button>
+                <button type="button" data-ask="checkbox">Check</button>
+                <button type="button" data-ask="textArea">Área de texto</button>
+              </div>
               <div class="gpj-img-hint">
                 Traçado manual: arraste sobre o <strong>texto do label</strong> e depois sobre a
                 <strong>área do leitor</strong>. Cada par vira um campo com linha, coluna e tamanho exatos da grade.
@@ -2890,6 +2927,21 @@
         await useFile(fileInput.files?.[0]);
         fileInput.value = "";
       });
+
+      askBox = backdrop.querySelector(".gpj-img-ask");
+      askBox.querySelectorAll("[data-ask]").forEach((button) =>
+        button.addEventListener("click", () => {
+          const row = view.rows[view.rows.length - 1];
+          if (!row) return;
+
+          row.type = button.dataset.ask;
+          renderTable();
+          draw();
+          focusLastRow();
+          askBox.classList.remove("on");
+          setStatus(`Campo marcado como ${button.textContent}. Escreva o nome dele ao lado.`);
+        })
+      );
 
       const drop = stage;
       ["dragenter", "dragover"].forEach((type) =>

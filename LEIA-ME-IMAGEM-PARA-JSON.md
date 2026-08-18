@@ -389,3 +389,24 @@ parêntese só cai quando está desemparelhado — `Perc. Ágio(%)` continua int
 
 **Botão Consultar.** Faltava um lugar: o importador de JSON simples também tinha a coluna
 50 fixa. Agora o padrão é 86 em todos os caminhos.
+
+---
+
+## Nona rodada — "o que você marcou?" e botão de consulta
+
+**Pergunta do tipo no traçado manual.** Depois de marcar um campo com o mouse aparece uma
+barra logo acima da imagem: *O que você marcou?* com Texto, Número, Data, Decimal, Combo,
+Radio, Check e Área de texto. Um clique aplica o tipo ao campo recém-criado e o cursor vai
+para o nome dele. É o caminho para quando o OCR não consegue dizer o que é aquilo.
+
+**Botão de consulta.** Duas mudanças:
+
+- o `btnConsultar` só é gerado quando existe na tela um botão *Consultar*, *Pesquisar*,
+  *Limpar* ou *Filtrar* — antes toda rotina de consulta com grid ganhava um, mesmo sem ele
+  no print;
+- esses botões deixaram de virar botões personalizados, então o `Consultar` não aparece
+  mais duas vezes.
+
+**Validação nova.** Se sobrar um botão personalizado chamado *Consultar* ou *Limpar*, o
+validador avisa: `O botão "Consultar" faz o que o botão padrão da consulta já faz` —
+sugerindo remover, ou ligar o *Gerar BtnConsultar* no card do Grid.

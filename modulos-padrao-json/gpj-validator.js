@@ -613,6 +613,25 @@
     return result;
   }
 
+  function checkConsultButtons(add, config, state) {
+    const consult = /^(consultar?|pesquisar?|limpar|filtrar)$/i;
+
+    state.customButtons
+      .filter((button) => consult.test(String(button.text || "").trim()))
+      .forEach((button) => {
+        add.warn(
+          "botao-consulta-duplicado",
+          `O botão "${button.text}" faz o que o botão padrão da consulta já faz.`,
+          {
+            hint: config.gridUseConsultButton
+              ? "A tela já gera o btnConsultar; remova este botão personalizado."
+              : "Ligue \"Gerar BtnConsultar\" no card do Grid e remova este botão.",
+            where: "Botões personalizados"
+          }
+        );
+      });
+  }
+
   function checkGrids(add, config, state) {
     const usedCodes = new Map();
     const usedWorkGlobals = new Map();
@@ -834,6 +853,7 @@
       checkLayout(add, config, state);
       checkKeysAndRules(add, config, state);
       checkGrids(add, config, state);
+      checkConsultButtons(add, config, state);
       checkGeneratedF7(add, config);
     } catch (error) {
       add.warn("validador-erro", `O validador encontrou um erro interno: ${error.message}`);
