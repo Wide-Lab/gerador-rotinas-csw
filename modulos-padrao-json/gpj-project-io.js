@@ -144,7 +144,14 @@
       useRoutineCompany: booleanValue(
         routine.useRoutineCompany ?? rules.useRoutineCompany,
         current.useRoutineCompany
-      )
+      ),
+
+      // Origens simples (importador de tela/imagem/desenhador) também definem
+      // onde ficam os botões de manutenção.
+      useBtnManter: booleanValue(routine.useBtnManter, current.useBtnManter),
+      btnManterLine: numberValue(routine.btnManterLine, current.btnManterLine),
+      btnManterColumn: numberValue(routine.btnManterColumn, current.btnManterColumn),
+      btnManterLocation: routine.btnManterLocation || current.btnManterLocation
     };
   }
 

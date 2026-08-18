@@ -71,3 +71,67 @@ modulos-padrao-json/vendor/tesseract/
 ```
 
 Nada é baixado em tempo de execução.
+
+---
+
+## Atualização — a tela não é só campo
+
+O primeiro corte lia tudo como "label + leitor", então uma tela cheia de tabela virava
+dezenas de campos picados (`8 Ver.`, `ES re`, `Toses`…). Agora o importador separa as
+**regiões** da tela antes de montar qualquer campo:
+
+**Grid** — procura o maior bloco de linhas alinhadas em coluna. O cabeçalho vira o título
+das colunas (montado palavra a palavra, para não grudar dois títulos vizinhos) e as
+linhas de baixo dão o tipo de cada coluna: `11/01/2025` → data, `999999` → número,
+`1.234,50` → decimal, resto → texto. Colunas chamadas *Check*/*Sel* viram coluna de
+marcação; *Ações*/*Editar* entram como somente exibição.
+
+**Abas** — a tira logo acima do cabeçalho da tabela, quando são textos curtos sem `:`.
+Se o OCR juntar ou dividir errado, dá para corrigir os títulos direto num campo de texto
+(separados por ` | `).
+
+**Botões** — achados pela cor do fundo: o módulo lê os pixels em volta do texto e, quando
+o fundo é bem mais escuro que a página, trata como botão. A partir daí ele cresce o
+retângulo escuro para achar a coluna e a largura reais (o texto costuma estar centralizado
+dentro do botão). Um botão chamado *Manutenção* vira o btnManter da rotina; os outros
+viram botões personalizados. Sem leitura de pixel (ex.: navegador antigo), vale a
+posição: texto curto abaixo da tabela.
+
+**Campos** — o texto ao lado do label agora é entendido como o **conteúdo do leitor**, e o
+texto seguinte como o **display**. Antes cada um desses virava um campo solto. O valor
+também define o tipo: `22` → inteiro, `11/01/2025` → data, `1.234,50` → decimal.
+
+O que a tela gera:
+
+- com abas + grid, o grid vai para dentro da primeira aba (`contentType: grid`), que é
+  como a tela do ERP se organiza, e sai também a RG do grid;
+- sem abas, o grid fica na rotina principal e o modo da rotina vira *Consulta com Grid*.
+
+### Traçado manual por tipo
+
+O seletor **Marcar como** define o que o próximo arrasto do mouse cria:
+
+| modo | o que faz |
+|---|---|
+| Campo (label + leitor) | dois arrastos: primeiro o label, depois a área do leitor |
+| Grid | marca a área da tabela; as colunas saem do texto de dentro |
+| Aba | marca o texto de cada aba |
+| Botão | marca cada botão |
+
+### Teste feito
+
+Print sintético do estilo *Monitor de Regra Comercial* (1512x560, célula 14x20, campo no
+topo, cinco abas, tabela de 8 colunas com 6 linhas e dois botões escuros), em Chrome
+headless de verdade:
+
+- calibração estimada: **108 colunas x 28 linhas** (exato);
+- **grid** na linha 7, altura 7, com as 8 colunas separadas e tipadas —
+  `Acoes`, `Editar`, `Seq Calculo(n)`, `Codigo Regra(n)`, `Descricao(a)`, `Situacao(a)`,
+  `Tipo(a)`, `Data Inicio(d)`;
+- **abas**: `Regra Gerais | Regra Excecao | Geral | Catalogo | Tipo de Nota`;
+- **botões**: `Novo` e `Definir Dados`, ambos na linha 18;
+- **campos**: só o `Empresa` do topo — tipado como inteiro pelo valor `22` que estava na
+  tela, com display para a razão social ao lado;
+- projeto gerado com `WDOMPV200` + 5 abas + `WDOMPV200TAB1RG` (a RG do grid).
+
+A tela de formulário simples do teste anterior continua saindo igual — nenhum grid falso.
