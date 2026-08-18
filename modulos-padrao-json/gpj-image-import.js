@@ -28,9 +28,13 @@
     scale: 1,
     words: [],
     rows: [],
+    table: null,
+    grid: null,
+    tabs: [],
+    buttons: [],
     calibration: { columns: 108, lines: 28 },
     pending: null,
-    mode: "auto"
+    mode: "campo"
   };
 
   const helpers = () =>
@@ -95,9 +99,14 @@
         const current = lineWords[index];
         const distance = current.bbox.x0 - previous.bbox.x0;
         const characters = previous.text.length + 1;
+        const space = current.bbox.x0 - previous.bbox.x1;
+        const roughChar = (previous.bbox.x1 - previous.bbox.x0) / Math.max(1, previous.text.length);
 
-        // Só serve quando as palavras estão coladas por um espaço só.
+        // Só serve quando as palavras estão coladas por um espaço só. Colunas
+        // de tabela ficam longe umas das outras e falseariam a medida.
         if (distance <= 0 || characters < 2) continue;
+        if (space < 0 || space > roughChar * 2.5) continue;
+
         const advance = distance / characters;
         if (advance > 2 && advance < 60) advances.push(advance);
       }
@@ -277,62 +286,460 @@
 
   const LABEL_PATTERN = /[A-Za-zÀ-ÿ]{3,}/;
   const NOISE_PATTERN = /^[^A-Za-z0-9À-ÿ]+$/;
+  const VALUE_PATTERN = /^[\d.,:/\-%R$ ]+$/;
+  const DATE_PATTERN = /^\d{2}[/\-.]\d{2}[/\-.]\d{2,4}$/;
+  const NUMBER_PATTERN = /^-?[\d.]*\d(?:,\d+)?$/;
 
-  function detectRows() {
-    if (!view.words.length) return [];
+  /* ------------------------------------------------------------------ *
+   * Leitura das regiões da tela
+   *
+   * Uma tela CSW não é só "label + leitor". Ela tem tabela (grid), tira de
+   * abas e barra de botões. Sem separar isso, o texto de dentro da tabela vira
+   * um monte de campo picado.
+   * ------------------------------------------------------------------ */
 
-    const used = new Set();
+  function lineModel() {
     const gap = charWidth() * 2.2;
-    const rows = [];
 
-    clusterLines(view.words).forEach((lineWords) => {
-      // Números soltos e siglas curtas continuam na lista de runs porque
-      // costumam ser o valor mostrado ao lado do label — é assim que dá para
-      // medir o tamanho do leitor. Eles só não viram campo sozinhos.
-      const runs = groupRuns(lineWords, gap).filter((run) => !NOISE_PATTERN.test(run.text));
+    return clusterLines(view.words)
+      .map((lineWords, index) => {
+        const runs = groupRuns(lineWords, gap).filter((run) => !NOISE_PATTERN.test(run.text));
+        const tops = runs.map((run) => run.bbox.y0);
+        const bottoms = runs.map((run) => run.bbox.y1);
 
-      runs.forEach((run, index) => {
-        const text = run.text.replace(/[:：]\s*$/, "").trim();
+        return {
+          index,
+          runs,
+          top: tops.length ? Math.min(...tops) : 0,
+          bottom: bottoms.length ? Math.max(...bottoms) : 0
+        };
+      })
+      .filter((line) => line.runs.length);
+  }
+
+  // Fração dos runs da linha B que começam na mesma coluna de algum run da A.
+  function alignmentScore(reference, line, tolerance) {
+    if (!line.runs.length) return 0;
+
+    const hits = line.runs.filter((run) =>
+      reference.runs.some((other) => Math.abs(other.bbox.x0 - run.bbox.x0) <= tolerance)
+    ).length;
+
+    return hits / line.runs.length;
+  }
+
+  function clusterValues(values, tolerance) {
+    const sorted = [...values].sort((a, b) => a - b);
+    const clusters = [];
+
+    sorted.forEach((value) => {
+      const last = clusters[clusters.length - 1];
+      if (last && value - last.reference <= tolerance) {
+        last.items.push(value);
+        last.reference = value;
+        return;
+      }
+      clusters.push({ reference: value, items: [value] });
+    });
+
+    return clusters.map((cluster) => ({
+      start: Math.min(...cluster.items),
+      count: cluster.items.length
+    }));
+  }
+
+  function columnTypeFromValues(values) {
+    const clean = values.map((value) => String(value).trim()).filter(Boolean);
+    if (!clean.length) return "a";
+    if (clean.every((value) => DATE_PATTERN.test(value))) return "d";
+    if (clean.every((value) => NUMBER_PATTERN.test(value))) {
+      return clean.some((value) => value.includes(",")) ? "v3" : "n";
+    }
+    return "a";
+  }
+
+  // O maior bloco de linhas alinhadas em coluna é a tabela da tela.
+  function detectTable(lines) {
+    const tolerance = charWidth() * 1.8;
+    let best = null;
+
+    for (let start = 0; start < lines.length; start += 1) {
+      if (lines[start].runs.length < 3) continue;
+
+      let end = start;
+      while (
+        end + 1 < lines.length &&
+        lines[end + 1].runs.length >= 2 &&
+        alignmentScore(lines[start], lines[end + 1], tolerance) >= 0.6
+      ) {
+        end += 1;
+      }
+
+      const height = end - start + 1;
+      if (height >= 3 && (!best || height > best.height)) {
+        best = { start, end, height };
+      }
+    }
+
+    if (!best) return null;
+
+    const body = lines.slice(best.start, best.end + 1);
+    const header = body[0];
+    const dataLines = body.slice(1);
+
+    const starts = [];
+    body.forEach((line) => line.runs.forEach((run) => starts.push(run.bbox.x0)));
+
+    const clusters = clusterValues(starts, tolerance)
+      // Coluna que aparece em uma linha só costuma ser texto solto.
+      .filter((cluster) => cluster.count >= 2)
+      .sort((a, b) => a.start - b.start);
+
+    if (clusters.length < 2) return null;
+
+    const right = Math.max(
+      ...body.map((line) => Math.max(...line.runs.map((run) => run.bbox.x1)))
+    );
+
+    const columns = clusters.map((cluster, index) => {
+      const next = clusters[index + 1];
+      const limit = next ? next.start : right;
+
+      const titleWords = header.runs
+        .flatMap((run) => run.words || [run])
+        .filter(
+          (word) =>
+            word.bbox.x0 >= cluster.start - tolerance &&
+            word.bbox.x0 < limit - tolerance / 2
+        )
+        .sort((a, b) => a.bbox.x0 - b.bbox.x0);
+
+      const title = titleWords.length
+        ? { text: titleWords.map((word) => word.text).join(" ") }
+        : null;
+
+      const values = dataLines
+        .map((line) =>
+          line.runs.find(
+            (run) =>
+              run.bbox.x0 >= cluster.start - tolerance &&
+              run.bbox.x0 < limit - tolerance / 2
+          )
+        )
+        .filter(Boolean)
+        .map((run) => run.text);
+
+      return {
+        title: title ? title.text.replace(/[:：]\s*$/, "").trim() : `Coluna ${index + 1}`,
+        start: cluster.start,
+        width: Math.max(3, toSize(limit - cluster.start) - 1),
+        type: columnTypeFromValues(values),
+        samples: values.slice(0, 3)
+      };
+    });
+
+    return {
+      lines: body,
+      top: header.top,
+      bottom: body[body.length - 1].bottom,
+      left: Math.min(...body.map((line) => Math.min(...line.runs.map((run) => run.bbox.x0)))),
+      right,
+      columns
+    };
+  }
+
+  /* Fundo local de um texto: acha botão (texto sobre caixa escura) sem
+     precisar de visão computacional. */
+  function backgroundProbe() {
+    if (!view.image) return null;
+
+    try {
+      const off = document.createElement("canvas");
+      off.width = view.image.naturalWidth;
+      off.height = view.image.naturalHeight;
+
+      const ctx = off.getContext("2d");
+      if (!ctx || typeof ctx.getImageData !== "function") return null;
+
+      ctx.drawImage(view.image, 0, 0);
+      const data = ctx.getImageData(0, 0, off.width, off.height).data;
+
+      const luminance = (x, y) => {
+        const px = Math.max(0, Math.min(off.width - 1, Math.round(x)));
+        const py = Math.max(0, Math.min(off.height - 1, Math.round(y)));
+        const position = (py * off.width + px) * 4;
+        return 0.299 * data[position] + 0.587 * data[position + 1] + 0.114 * data[position + 2];
+      };
+
+      const samples = [];
+      for (let y = 0; y < off.height; y += 7) {
+        for (let x = 0; x < off.width; x += 7) samples.push(luminance(x, y));
+      }
+
+      return {
+        page: median(samples),
+        // Limites da caixa escura em volta do texto (botão).
+        expand(bbox, threshold) {
+          const middle = (bbox.y0 + bbox.y1) / 2;
+          let left = bbox.x0;
+          let right = bbox.x1;
+          let top = bbox.y0;
+          let bottom = bbox.y1;
+
+          while (left > 1 && luminance(left - 2, middle) < threshold) left -= 2;
+          while (right < off.width - 2 && luminance(right + 2, middle) < threshold) right += 2;
+
+          const center = (left + right) / 2;
+          while (top > 1 && luminance(center, top - 2) < threshold) top -= 2;
+          while (bottom < off.height - 2 && luminance(center, bottom + 2) < threshold) bottom += 2;
+
+          return { x0: left, y0: top, x1: right, y1: bottom };
+        },
+        around(bbox) {
+          const values = [];
+          const step = Math.max(2, Math.round((bbox.x1 - bbox.x0) / 12));
+
+          for (let x = bbox.x0; x <= bbox.x1; x += step) {
+            values.push(luminance(x, bbox.y0 - 4));
+            values.push(luminance(x, bbox.y1 + 4));
+          }
+          values.push(luminance(bbox.x0 - 5, (bbox.y0 + bbox.y1) / 2));
+          values.push(luminance(bbox.x1 + 5, (bbox.y0 + bbox.y1) / 2));
+
+          return median(values);
+        }
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function detectButtons(lines, table, probe) {
+    const buttons = [];
+
+    lines.forEach((line) => {
+      if (table && line.top >= table.top - 2 && line.bottom <= table.bottom + 2) return;
+
+      line.runs.forEach((run) => {
+        const text = run.text.trim();
         if (!LABEL_PATTERN.test(text)) return;
+        if (text.length > 28 || text.includes(":")) return;
+
+        const local = probe ? probe.around(run.bbox) : null;
+        const isDark = local !== null && local < probe.page * 0.72;
+
+        // Sem leitura de pixel sobra a posição: texto curto abaixo da tabela.
+        const belowTable = table ? run.bbox.y0 > table.bottom + lineHeight() : false;
+        if (!isDark && !belowTable) return;
+
+        const box = isDark ? probe.expand(run.bbox, probe.page * 0.72) : { ...run.bbox };
+
+        buttons.push({
+          id: app.utils.createId(),
+          include: true,
+          text,
+          line: toLine(box.y0, box.y1 - box.y0),
+          column: toColumn(box.x0),
+          size: Math.max(8, toSize(box.x1 - box.x0)),
+          box,
+          textBox: { ...run.bbox }
+        });
+      });
+    });
+
+    return buttons;
+  }
+
+  function detectTabs(lines, table) {
+    if (!table) return [];
+
+    // A tira de abas fica logo acima do cabeçalho da tabela.
+    const candidates = lines.filter(
+      (line) => line.bottom < table.top && table.top - line.bottom < lineHeight() * 2.5
+    );
+    const strip = candidates[candidates.length - 1];
+    if (!strip || strip.runs.length < 2) return [];
+
+    const texts = strip.runs.map((run) => run.text.replace(/[:：]\s*$/, "").trim());
+    const looksLikeTabs = texts.every(
+      (text) => text.length <= 26 && LABEL_PATTERN.test(text) && !VALUE_PATTERN.test(text)
+    );
+    if (!looksLikeTabs) return [];
+
+    return strip.runs.map((run, index) => ({
+      id: app.utils.createId(),
+      include: true,
+      title: texts[index],
+      line: toLine(run.bbox.y0, run.bbox.y1 - run.bbox.y0),
+      box: { ...run.bbox }
+    }));
+  }
+
+  // O valor que aparece na tela ao lado do label ajuda a dizer o tipo.
+  function typeFromSample(value) {
+    if (!value) return "";
+    if (DATE_PATTERN.test(value)) return "date";
+    if (/^\d+$/.test(value)) return "integer";
+    if (/^-?[\d.]+,\d+$/.test(value)) return "decimal";
+    return "";
+  }
+
+  function detectFields(lines, table, tabs, buttons) {
+    const used = new Set();
+    const rows = [];
+    const consumed = [...buttons, ...tabs].map((item) => item.textBox || item.box);
+
+    const isConsumed = (run) =>
+      consumed.some((box) => run.bbox.x0 === box.x0 && run.bbox.y0 === box.y0);
+
+    lines.forEach((line) => {
+      if (table && line.top >= table.top - 2 && line.bottom <= table.bottom + 2) return;
+
+      const runs = line.runs;
+      let index = 0;
+
+      while (index < runs.length) {
+        const run = runs[index];
+        const raw = run.text.trim();
+        const endsWithColon = /[:：]\s*$/.test(raw);
+        const text = raw.replace(/[:：]\s*$/, "").trim();
+
+        if (isConsumed(run) || !LABEL_PATTERN.test(text) || VALUE_PATTERN.test(text)) {
+          index += 1;
+          continue;
+        }
 
         const next = runs[index + 1];
+        const following = runs[index + 2];
+
+        // O texto logo depois do label é o conteúdo do leitor quando é um
+        // valor (número, data, código) ou quando o label termina em ":".
+        const nextIsValue =
+          next && (VALUE_PATTERN.test(next.text.trim()) || endsWithColon);
+
+        // Depois do valor ainda pode vir o display (descrição do código).
+        const displayRun =
+          nextIsValue &&
+          following &&
+          !VALUE_PATTERN.test(following.text.trim()) &&
+          !/[:：]\s*$/.test(following.text) &&
+          LABEL_PATTERN.test(following.text)
+            ? following
+            : null;
+
         const labelEnd = run.bbox.x1;
-        const freeSpace = next ? next.bbox.x0 - labelEnd : view.image.naturalWidth - labelEnd;
+        const gapTarget = nextIsValue ? runs[index + 2] : next;
+        const freeSpace = nextIsValue
+          ? Math.max(next.bbox.x1 - next.bbox.x0, charWidth() * 4)
+          : gapTarget
+            ? gapTarget.bbox.x0 - labelEnd
+            : view.image.naturalWidth - labelEnd;
 
         const description = text.replace(/\s{2,}/g, " ");
         const variable = helpers().variableFromDescription(description, used);
-        const type = helpers().inferType(description) || "string";
+        const sampled = nextIsValue ? typeFromSample(next.text.trim()) : "";
+        const type = helpers().inferType(description) || sampled || "string";
 
-        // Com um valor ao lado dá para medir o espaço real do leitor; sem ele,
-        // o tamanho vem do tipo do campo.
-        const inputSize = next
-          ? Math.max(4, Math.min(60, toSize(freeSpace) - 1))
-          : helpers().defaultSize(type, description);
+        const inputColumn = nextIsValue ? toColumn(next.bbox.x0) : toColumn(labelEnd) + 1;
+        const inputSize = nextIsValue
+          ? Math.max(4, Math.min(60, toSize(freeSpace) + 2))
+          : next
+            ? Math.max(4, Math.min(60, toSize(freeSpace) - 1))
+            : helpers().defaultSize(type, description);
+
+        const line1 = toLine(run.bbox.y0, run.bbox.y1 - run.bbox.y0);
 
         rows.push({
           id: app.utils.createId(),
           // A primeira linha quase sempre é o título da janela, não um campo.
-          include: freeSpace > charWidth() * 3 && toLine(run.bbox.y0, run.bbox.y1 - run.bbox.y0) > 1,
+          include: (nextIsValue || freeSpace > charWidth() * 3) && line1 > 1,
           origin: "ocr",
           description,
           variable,
           type,
           required: false,
           isKey: false,
-          labelLine: toLine(run.bbox.y0, run.bbox.y1 - run.bbox.y0),
+          labelLine: line1,
           labelColumn: toColumn(run.bbox.x0),
           labelSize: Math.max(2, toSize(run.bbox.x1 - run.bbox.x0)),
-          inputColumn: toColumn(labelEnd) + 1,
+          inputColumn,
           inputSize,
+          hasDisplay: Boolean(displayRun),
+          displayColumn: displayRun ? toColumn(displayRun.bbox.x0) : inputColumn + inputSize + 2,
+          displaySize: displayRun
+            ? Math.max(10, toSize(displayRun.bbox.x1 - displayRun.bbox.x0))
+            : 30,
           lookupPreset: helpers().inferLookup(description) || "none",
           box: { ...run.bbox }
         });
-      });
+
+        // Pula o valor e o display: eles não são campos por si só.
+        index += 1 + (nextIsValue ? 1 : 0) + (displayRun ? 1 : 0);
+      }
     });
 
     return rows;
   }
 
+  function gridFromRegion(table) {
+    if (!table) return null;
+
+    const used = new Set();
+    const line = toLine(table.top, 0);
+    const bottom = toLine(table.bottom, 0);
+
+    return {
+      include: true,
+      line,
+      height: Math.max(3, bottom - line + 1),
+      columns: table.columns.map((column, index) => {
+        const isCheck = /^(check|sel|marca)/i.test(column.title);
+        const isAction = /^(a[çc][õo]es|editar|excluir|visualizar)$/i.test(column.title);
+
+        return {
+          id: app.utils.createId(),
+          include: true,
+          title: column.title,
+          variable: helpers().variableFromDescription(column.title || `COLUNA${index + 1}`, used),
+          type: isCheck ? "checkheader" : column.type,
+          width: column.width,
+          workPiece: isCheck ? 0 : index + 1,
+          recordKey: false,
+          displayOnly: isAction,
+          samples: column.samples || []
+        };
+      })
+    };
+  }
+
+  function analyze() {
+    if (!view.words.length || !view.image) {
+      view.rows = [];
+      view.table = null;
+      view.grid = null;
+      view.tabs = [];
+      view.buttons = [];
+      return;
+    }
+
+    const lines = lineModel();
+    const table = detectTable(lines);
+    const probe = backgroundProbe();
+    const buttons = detectButtons(lines, table, probe);
+    const tabs = detectTabs(lines, table);
+
+    view.table = table;
+    view.grid = gridFromRegion(table);
+    view.tabs = tabs;
+    view.buttons = buttons;
+    view.rows = detectFields(lines, table, tabs, buttons);
+  }
+
+  // Mantido pelo nome antigo: continua devolvendo só os campos.
+  function detectRows() {
+    analyze();
+    return view.rows;
+  }
   /* ------------------------------------------------------------------ *
    * Desenho
    * ------------------------------------------------------------------ */
@@ -370,6 +777,62 @@
       context.stroke();
     }
 
+    // Região do grid
+    if (view.grid && view.grid.include && view.table) {
+      const x = view.table.left * view.scale;
+      const y = (view.grid.line - 1) * lh;
+      const width = (view.table.right - view.table.left) * view.scale;
+      const height = view.grid.height * lh;
+
+      context.fillStyle = "rgba(234, 88, 12, 0.10)";
+      context.fillRect(x, y, width, height);
+      context.strokeStyle = "#ea580c";
+      context.lineWidth = 2;
+      context.strokeRect(x, y, width, height);
+
+      context.fillStyle = "#ea580c";
+      context.font = "11px sans-serif";
+      context.fillText(`Grid — ${view.grid.columns.length} colunas`, x + 4, Math.max(10, y - 3));
+
+      view.grid.columns.forEach((column, index) => {
+        const source = view.table.columns[index];
+        if (!source || index === 0) return;
+        context.beginPath();
+        context.strokeStyle = "rgba(234, 88, 12, 0.55)";
+        context.lineWidth = 1;
+        context.moveTo(source.start * view.scale, y);
+        context.lineTo(source.start * view.scale, y + height);
+        context.stroke();
+      });
+    }
+
+    // Abas
+    view.tabs.filter((tab) => tab.include).forEach((tab) => {
+      const box = tab.box;
+      context.strokeStyle = "#7c3aed";
+      context.lineWidth = 2;
+      context.strokeRect(
+        box.x0 * view.scale - 2,
+        box.y0 * view.scale - 2,
+        (box.x1 - box.x0) * view.scale + 4,
+        (box.y1 - box.y0) * view.scale + 4
+      );
+    });
+
+    // Botões
+    view.buttons.filter((button) => button.include).forEach((button) => {
+      const box = button.box;
+      context.strokeStyle = "#0f172a";
+      context.lineWidth = 2;
+      context.strokeRect(
+        box.x0 * view.scale - 3,
+        box.y0 * view.scale - 3,
+        (box.x1 - box.x0) * view.scale + 6,
+        (box.y1 - box.y0) * view.scale + 6
+      );
+    });
+
+    // Campos
     view.rows.forEach((row) => {
       if (!row.include) return;
 
@@ -387,12 +850,13 @@
     if (view.pending && view.pending.rect) {
       const { x, y, width, height } = view.pending.rect;
       context.setLineDash([5, 4]);
-      context.strokeStyle = view.pending.step === "label" ? "#16a34a" : "#2563eb";
+      context.strokeStyle =
+        view.mode === "grid" ? "#ea580c" : view.pending.step === "label" ? "#16a34a" : "#2563eb";
+      context.lineWidth = 2;
       context.strokeRect(x, y, width, height);
       context.setLineDash([]);
     }
   }
-
   function textInsideBox(box) {
     const inside = view.words.filter(
       (word) =>
@@ -441,7 +905,13 @@
     .gpj-img-toolbar button.active { background: #1e293b; border-color: #1e293b; color: #fff; }
     .gpj-img-hint { font-size: 12px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
       border-radius: 8px; padding: 7px 10px; margin-bottom: 8px; }
-    .gpj-img-table { border: 1px solid #e5e9f0; border-radius: 10px; overflow: auto; max-height: 52vh; }
+    .gpj-img-table { border: 1px solid #e5e9f0; border-radius: 10px; overflow: auto; max-height: 42vh; }
+    .gpj-img-table.inner { max-height: 220px; margin-top: 6px; }
+    .gpj-img-regions { margin-bottom: 10px; }
+    .gpj-img-region { border: 1px solid #e5e9f0; border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; background: #fcfdff; }
+    .gpj-img-region-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+    .gpj-img-region-head span { opacity: .7; font-size: 12px; }
+    .gpj-img-sample { font-size: 11px; opacity: .6; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
     .gpj-img-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .gpj-img-table th, .gpj-img-table td { padding: 5px 6px; border-bottom: 1px solid #eef1f6; text-align: left; }
     .gpj-img-table th { position: sticky; top: 0; background: #f8fafc; font-size: 10.5px;
@@ -462,6 +932,7 @@
   let statusLabel = null;
   let progressBar = null;
   let tableBox = null;
+  let regionBox = null;
   let stage = null;
 
   function injectStyle() {
@@ -470,6 +941,14 @@
     style.id = "gpj-img-style";
     style.textContent = STYLE;
     document.head.appendChild(style);
+  }
+
+  function regionSummary() {
+    const parts = [`${view.words.length} palavra(s) lidas`, `${view.rows.length} campo(s)`];
+    if (view.grid) parts.push(`grid com ${view.grid.columns.length} coluna(s)`);
+    if (view.tabs.length) parts.push(`${view.tabs.length} aba(s)`);
+    if (view.buttons.length) parts.push(`${view.buttons.length} botão(ões)`);
+    return `${parts.join(", ")}. Confira a grade e a lista ao lado.`;
   }
 
   function setStatus(message, progress = null) {
@@ -487,7 +966,140 @@
     ["radio", "RadioButton"], ["multiSelect", "Multi-Seleção"]
   ];
 
+  const GRID_TYPE_OPTIONS = [
+    ["a", "Texto"],
+    ["n", "Número"],
+    ["d", "Data"],
+    ["v3", "Decimal"],
+    ["checkheader", "Check"]
+  ];
+
+  function renderRegions() {
+    if (!regionBox) return;
+
+    const parts = [];
+
+    if (view.grid) {
+      const columns = view.grid.columns
+        .map(
+          (column, index) => `
+          <tr>
+            <td><input type="checkbox" data-col="${index}" data-col-property="include" ${column.include ? "checked" : ""}></td>
+            <td><input type="text" data-col="${index}" data-col-property="title" value="${app.utils.escapeHtml(column.title)}"></td>
+            <td><input type="text" data-col="${index}" data-col-property="variable" value="${app.utils.escapeHtml(column.variable)}" style="width:96px"></td>
+            <td><select data-col="${index}" data-col-property="type">${GRID_TYPE_OPTIONS.map(
+              ([value, label]) =>
+                `<option value="${value}" ${column.type === value ? "selected" : ""}>${label}</option>`
+            ).join("")}</select></td>
+            <td><input type="number" min="1" data-col="${index}" data-col-property="width" value="${column.width}"></td>
+            <td><input type="checkbox" data-col="${index}" data-col-property="recordKey" ${column.recordKey ? "checked" : ""}></td>
+            <td class="gpj-img-sample">${app.utils.escapeHtml((column.samples || []).slice(0, 2).join(" · "))}</td>
+          </tr>`
+        )
+        .join("");
+
+      parts.push(`
+        <div class="gpj-img-region">
+          <label class="gpj-img-region-head">
+            <input type="checkbox" data-region="grid" ${view.grid.include ? "checked" : ""}>
+            <strong>Grid detectado</strong>
+            <span>linha ${view.grid.line}, altura ${view.grid.height}, ${view.grid.columns.length} colunas</span>
+          </label>
+          <div class="gpj-img-table inner">
+            <table>
+              <thead><tr><th>Usar</th><th>Coluna</th><th>Variável</th><th>Tipo</th><th>Tam.</th><th>Chave</th><th>Exemplo</th></tr></thead>
+              <tbody>${columns}</tbody>
+            </table>
+          </div>
+        </div>`);
+    }
+
+    if (view.tabs.length) {
+      parts.push(`
+        <div class="gpj-img-region">
+          <label class="gpj-img-region-head">
+            <input type="checkbox" data-region="tabs" ${view.tabs.some((tab) => tab.include) ? "checked" : ""}>
+            <strong>Abas detectadas</strong>
+          </label>
+          <input type="text" data-tabs-text value="${app.utils.escapeHtml(
+            view.tabs.map((tab) => tab.title).join(" | ")
+          )}" style="width:100%;margin-top:6px;padding:4px 6px;border:1px solid #dbe1ea;border-radius:6px;font-size:12.5px">
+          <span style="font-size:11px;opacity:.6">Separe os títulos por " | " se o OCR juntar ou dividir errado.</span>
+        </div>`);
+    }
+
+    if (view.buttons.length) {
+      parts.push(`
+        <div class="gpj-img-region">
+          <label class="gpj-img-region-head">
+            <input type="checkbox" data-region="buttons" ${view.buttons.some((button) => button.include) ? "checked" : ""}>
+            <strong>Botões detectados</strong>
+            <span>${view.buttons
+              .map((button) => `${app.utils.escapeHtml(button.text)} (linha ${button.line})`)
+              .join(" · ")}</span>
+          </label>
+        </div>`);
+    }
+
+    regionBox.innerHTML = parts.join("");
+
+    regionBox.querySelectorAll("[data-region]").forEach((input) =>
+      input.addEventListener("change", () => {
+        const region = input.dataset.region;
+        if (region === "grid" && view.grid) view.grid.include = input.checked;
+        if (region === "tabs") view.tabs.forEach((tab) => (tab.include = input.checked));
+        if (region === "buttons") view.buttons.forEach((button) => (button.include = input.checked));
+        draw();
+      })
+    );
+
+    const tabsInput = regionBox.querySelector("[data-tabs-text]");
+    if (tabsInput) {
+      tabsInput.addEventListener("change", () => {
+        const titles = tabsInput.value
+          .split("|")
+          .map((title) => title.trim())
+          .filter(Boolean);
+
+        view.tabs = titles.map((title, index) => ({
+          id: view.tabs[index]?.id || app.utils.createId(),
+          include: true,
+          title,
+          line: view.tabs[index]?.line || 1,
+          box: view.tabs[index]?.box || { x0: 0, y0: 0, x1: 0, y1: 0 }
+        }));
+
+        renderTable();
+        draw();
+      });
+    }
+
+    regionBox.querySelectorAll("[data-col]").forEach((input) => {
+      const handler = () => {
+        const column = view.grid?.columns[Number(input.dataset.col)];
+        if (!column) return;
+        const property = input.dataset.colProperty;
+
+        column[property] =
+          input.type === "checkbox"
+            ? input.checked
+            : input.type === "number"
+              ? Number(input.value) || 1
+              : input.value;
+
+        draw();
+      };
+
+      input.addEventListener("change", handler);
+      if (input.type === "text" || input.type === "number") {
+        input.addEventListener("input", handler);
+      }
+    });
+  }
+
   function renderTable() {
+    renderRegions();
+
     if (!tableBox) return;
 
     if (!view.rows.length) {
@@ -560,7 +1172,6 @@
       })
     );
   }
-
   async function loadImage(source) {
     return new Promise((resolve, reject) => {
       const image = new Image();
@@ -592,6 +1203,45 @@
     setStatus(
       `Imagem de ${view.image.naturalWidth}x${view.image.naturalHeight}px carregada. Ajuste a grade e rode o OCR, ou marque os campos com o mouse.`
     );
+  }
+
+  // Marca uma área como grid: as colunas saem do texto que estiver dentro do
+  // retângulo, usando a primeira linha como cabeçalho.
+  function gridFromBox(box) {
+    const inside = view.words.filter(
+      (word) =>
+        word.bbox.x0 >= box.x0 - 4 &&
+        word.bbox.x1 <= box.x1 + 4 &&
+        word.bbox.y0 >= box.y0 - 4 &&
+        word.bbox.y1 <= box.y1 + 4
+    );
+
+    const line = toLine(box.y0, 0);
+    const height = Math.max(3, toLine(box.y1, 0) - line + 1);
+
+    if (inside.length < 2) {
+      return {
+        include: true,
+        line,
+        height,
+        columns: []
+      };
+    }
+
+    const saved = view.words;
+    view.words = inside;
+    const table = detectTable(lineModel());
+    view.words = saved;
+
+    if (!table) {
+      return { include: true, line, height, columns: [] };
+    }
+
+    view.table = table;
+    const grid = gridFromRegion(table);
+    grid.line = line;
+    grid.height = height;
+    return grid;
   }
 
   function bindCanvas() {
@@ -643,6 +1293,52 @@
         y1: (rect.y + rect.height) / view.scale
       };
 
+      view.pending.rect = null;
+
+      if (view.mode === "grid") {
+        view.grid = gridFromBox(box);
+        renderTable();
+        draw();
+        setStatus(
+          view.grid.columns.length
+            ? `Grid marcado na linha ${view.grid.line} com ${view.grid.columns.length} coluna(s).`
+            : `Área do grid marcada na linha ${view.grid.line}. Rode o OCR para tirar as colunas do cabeçalho.`
+        );
+        return;
+      }
+
+      if (view.mode === "botao") {
+        const text = textInsideBox(box) || `Botão ${view.buttons.length + 1}`;
+        view.buttons.push({
+          id: app.utils.createId(),
+          include: true,
+          text,
+          line: toLine(box.y0, box.y1 - box.y0),
+          column: toColumn(box.x0),
+          size: Math.max(8, toSize(box.x1 - box.x0)),
+          box
+        });
+        renderTable();
+        draw();
+        setStatus(`Botão "${text}" marcado.`);
+        return;
+      }
+
+      if (view.mode === "aba") {
+        const title = textInsideBox(box) || `Aba ${view.tabs.length + 1}`;
+        view.tabs.push({
+          id: app.utils.createId(),
+          include: true,
+          title,
+          line: toLine(box.y0, box.y1 - box.y0),
+          box
+        });
+        renderTable();
+        draw();
+        setStatus(`Aba "${title}" marcada.`);
+        return;
+      }
+
       if (view.pending.step === "label") {
         const description = textInsideBox(box) || `Campo ${view.rows.length + 1}`;
         const used = new Set(view.rows.map((row) => row.variable));
@@ -666,7 +1362,6 @@
         };
 
         view.pending.step = "input";
-        view.pending.rect = null;
         setStatus(`Label "${description}" marcado. Agora marque a área do leitor.`);
         draw();
         return;
@@ -685,6 +1380,37 @@
       setStatus(`Campo "${row.description}" adicionado. Marque o próximo label.`);
     });
   }
+  function gridDefinition(routineName, location) {
+    if (!view.grid || !view.grid.include) return null;
+
+    const columns = view.grid.columns.filter((column) => column.include);
+    if (!columns.length) return null;
+
+    const line = Math.max(1, view.grid.line);
+    const height = Math.max(3, view.grid.height);
+
+    return {
+      location,
+      gridCode: location === "parent" ? 1 : 41,
+      gridLinePosition: line,
+      gridHeight: height,
+      gridLineStart: line,
+      gridLineEnd: line + height - 1,
+      gridNavigation: 1,
+      gridWorkGlobal: `mtemp${routineName}`.slice(0, 31),
+      gridCheckGlobal: `mtemp${routineName}CHECK`.slice(0, 31),
+      columns: columns.map((column, index) => ({
+        title: column.type === "checkheader" ? "" : column.title,
+        variable: app.utils.normalizeVariable(column.variable, `COLUNA${index + 1}`),
+        type: column.type,
+        width: column.width,
+        workPiece: column.type === "checkheader" ? 0 : index + 1,
+        recordKey: column.recordKey === true,
+        detail: column.type !== "checkheader",
+        displayOnly: column.displayOnly === true
+      }))
+    };
+  }
 
   function buildDocument() {
     const rows = view.rows.filter((row) => row.include);
@@ -694,22 +1420,56 @@
     );
     const title = backdrop.querySelector("[data-img-title]").value.trim() || "Tela importada";
 
+    const tabs = view.tabs.filter((tab) => tab.include);
+    const buttons = view.buttons.filter((button) => button.include);
+    const hasGrid = Boolean(view.grid && view.grid.include);
+
+    // Com tira de abas, o grid mora dentro da primeira aba — é assim que a
+    // tela do ERP se organiza. Sem abas, o grid fica na rotina principal.
+    const gridLocation = tabs.length ? "aba1" : "parent";
+    const grid = gridDefinition(routineName, gridLocation);
+
+    const documentTabs = tabs.map((tab, index) => ({
+      id: `aba${index + 1}`,
+      title: tab.title,
+      routineName: `${routineName}TAB${index + 1}`.slice(0, 31),
+      gridRgRoutineName: `${routineName}TAB${index + 1}RG`.slice(0, 31),
+      dataVariable: `${routineName}T${index + 1}`.slice(0, 20),
+      globalSubscript: String(index + 4),
+      contentType: index === 0 && grid ? "grid" : "fields"
+    }));
+
+    const manutencao = buttons.find((button) => /manuten/i.test(button.text));
+    const extraButtons = buttons.filter((button) => button !== manutencao);
+
     return {
       routine: {
         name: routineName,
         title,
-        mode: "crud",
+        mode: grid && gridLocation === "parent" ? "grid" : "crud",
         dataVariable: routineName.slice(0, 8),
-        useTabs: false,
+        useTabs: documentTabs.length > 0,
         useRules: true,
+        useBtnManter: Boolean(manutencao),
+        btnManterLine: manutencao ? manutencao.line : undefined,
+        btnManterColumn: manutencao ? manutencao.column : undefined,
         rgRoutineName: `${routineName}RG`,
         entityName: title,
         globalName: routineName,
         width: view.calibration.columns,
         height: view.calibration.lines
       },
-      tabs: [],
-      grids: [],
+      tabs: documentTabs,
+      grids: grid ? [grid] : [],
+      buttons: extraButtons.map((button, index) => ({
+        location: "parent",
+        text: button.text,
+        positionMode: "manual",
+        line: button.line,
+        column: button.column,
+        size: button.size,
+        buttonId: `bt${app.utils.normalizeVariable(button.text, `BOTAO${index + 1}`).slice(0, 18)}`
+      })),
       fields: rows.map((row) => ({
         description: row.description,
         variable: app.utils.normalizeVariable(row.variable, "CAMPO"),
@@ -727,7 +1487,8 @@
         displayLine: row.labelLine,
         displaySize: 30,
         hasDisplay:
-          row.lookupPreset !== "none" && !["date", "textArea"].includes(row.type),
+          (row.hasDisplay === true || row.lookupPreset !== "none") &&
+          !["date", "textArea"].includes(row.type),
         lookupPreset: row.lookupPreset || "none",
         _applyLookupPreset: true
       })),
@@ -740,7 +1501,6 @@
         }))
     };
   }
-
   function appendToProject() {
     const rows = view.rows.filter((row) => row.include);
     if (!rows.length) {
@@ -804,6 +1564,14 @@
                 <button type="button" data-img-ocr>Ler com OCR</button>
                 <button type="button" data-img-detect>Detectar campos</button>
                 <button type="button" data-img-clear>Limpar campos</button>
+                <label>Marcar como
+                  <select data-img-mode>
+                    <option value="campo">Campo (label + leitor)</option>
+                    <option value="grid">Grid</option>
+                    <option value="aba">Aba</option>
+                    <option value="botao">Botão</option>
+                  </select>
+                </label>
                 <label>Colunas <input type="number" min="20" max="240" data-img-columns value="108"></label>
                 <label>Linhas <input type="number" min="8" max="80" data-img-lines value="28"></label>
                 <button type="button" data-img-calibrate>Calibrar pelo texto</button>
@@ -819,6 +1587,7 @@
             </div>
 
             <div>
+              <div class="gpj-img-regions"></div>
               <div class="gpj-img-table"></div>
               <div class="gpj-img-toolbar" style="margin-top:10px">
                 <label>Rotina <input type="text" data-img-routine value="ROTINANOVA" style="width:120px;padding:4px 6px;border:1px solid #d5dbe6;border-radius:6px"></label>
@@ -847,6 +1616,7 @@
       canvas = stage.querySelector("canvas");
       context = canvas.getContext("2d");
       tableBox = backdrop.querySelector(".gpj-img-table");
+      regionBox = backdrop.querySelector(".gpj-img-regions");
       statusLabel = backdrop.querySelector(".gpj-img-status");
       progressBar = backdrop.querySelector(".gpj-img-progress span");
 
@@ -906,12 +1676,10 @@
             backdrop.querySelector("[data-img-lines]").value = calibration.lines;
           }
 
-          view.rows = detectRows();
+          analyze();
           renderTable();
           draw();
-          setStatus(
-            `${view.words.length} palavra(s) lidas, ${view.rows.length} campo(s) propostos. Confira a grade e a lista ao lado.`
-          );
+          setStatus(regionSummary());
         } catch (error) {
           setStatus(
             `OCR indisponível (${error.message}). O traçado manual continua funcionando normalmente.`
@@ -924,18 +1692,36 @@
           setStatus("Rode o OCR antes de detectar os campos.");
           return;
         }
-        view.rows = detectRows();
+        analyze();
         renderTable();
         draw();
-        setStatus(`${view.rows.length} campo(s) propostos com a grade atual.`);
+        setStatus(regionSummary());
+      });
+
+      backdrop.querySelector("[data-img-mode]").addEventListener("change", (event) => {
+        view.mode = event.target.value;
+        view.pending = { step: "label" };
+        setStatus(
+          view.mode === "grid"
+            ? "Arraste sobre a área da tabela para marcar o grid."
+            : view.mode === "aba"
+              ? "Arraste sobre o texto de cada aba."
+              : view.mode === "botao"
+                ? "Arraste sobre cada botão."
+                : "Arraste sobre o texto do label e depois sobre a área do leitor."
+        );
       });
 
       backdrop.querySelector("[data-img-clear]").addEventListener("click", () => {
         view.rows = [];
+        view.grid = null;
+        view.tabs = [];
+        view.buttons = [];
+        view.table = null;
         view.pending = { step: "label" };
         renderTable();
         draw();
-        setStatus("Lista de campos limpa.");
+        setStatus("Lista de campos e regiões limpa.");
       });
 
       backdrop.querySelector("[data-img-calibrate]").addEventListener("click", () => {
@@ -1025,6 +1811,8 @@
     close,
     install,
     detectRows,
+    analyze,
+    detectTable,
     calibrateFromWords,
     clusterLines,
     groupRuns,
