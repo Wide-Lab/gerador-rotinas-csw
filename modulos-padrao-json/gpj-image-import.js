@@ -2474,6 +2474,11 @@
     const manutencao = buttons.find((button) => /manuten/i.test(button.text));
     const extraButtons = buttons.filter((button) => button !== manutencao);
 
+    // O grid ocupa a faixa dele inteira (inclusive o rodapé de navegação); um
+    // botão dentro dessa faixa fica escondido atrás do grid.
+    const gridFloor = grid ? grid.gridLineEnd + 2 : 0;
+    const pushDown = (line) => Math.max(line, gridFloor);
+
     return {
       routine: {
         name: routineName,
@@ -2483,14 +2488,19 @@
         useTabs: documentTabs.length > 0,
         useRules: true,
         useBtnManter: Boolean(manutencao),
-        btnManterLine: manutencao ? manutencao.line : undefined,
+        btnManterLine: manutencao ? pushDown(manutencao.line) : undefined,
         btnManterColumn: manutencao ? manutencao.column : undefined,
         rgRoutineName: `${routineName}RG`,
         entityName: title,
         globalName: routineName,
         width: view.calibration.columns,
-        // A janela começa na primeira linha útil, não no topo do print.
-        height: Math.max(20, toLine(view.image.naturalHeight, 0))
+        // A janela começa na primeira linha útil e precisa caber o que ficou
+        // embaixo do grid.
+        height: Math.max(
+          20,
+          gridFloor + (buttons.length ? 2 : 0),
+          ...buttons.map((button) => pushDown(button.line) + 2)
+        )
       },
       tabs: documentTabs,
       grids: grid ? [grid] : [],
@@ -2498,7 +2508,7 @@
         location: "parent",
         text: button.text,
         positionMode: "manual",
-        line: button.line,
+        line: pushDown(button.line),
         column: button.column,
         size: button.size,
         buttonId: `bt${app.utils.normalizeVariable(button.text, `BOTAO${index + 1}`).slice(0, 18)}`

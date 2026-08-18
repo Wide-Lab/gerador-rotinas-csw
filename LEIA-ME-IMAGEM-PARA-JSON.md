@@ -313,3 +313,19 @@ As sete colunas do grid saem com título, tipo e largura praticamente iguais aos
 escrita à mão. O que sobra é uma linha de diferença na vertical (o print tem espaçamento
 maior entre os campos do que a grade fixa do CSW) e o nome do grupo de radio, que fica
 como `Opção` quando não há um label ao lado.
+
+---
+
+## Sexta rodada — posição do Consultar e botões atrás do grid
+
+**Botão Consultar/Limpar.** A tag saía sempre em `csw:btnConsultar:50,1`, ou seja, no meio
+da tela, colado nos campos de filtro. Na tela do ERP ele fica no canto direito — o padrão
+passou a ser a coluna 86 (numa janela de 108), tanto no importador quanto no card de Grid.
+
+**Botão escondido atrás do grid.** O grid ocupa a faixa dele inteira, incluindo o rodapé
+de navegação, então um botão posicionado dentro dessa faixa some da tela. Agora todo botão
+(e o btnManter) é empurrado para pelo menos duas linhas depois do fim do grid, e a altura
+da janela cresce junto para caber a barra de botões.
+
+No JSON de `WDWDNEW015`: grid nas linhas 4 a 21, botões que caíam na 22 (em cima do rodapé
+do grid) passam para a 23, e a janela vai de 24 para 25 linhas. O validador fica limpo.

@@ -596,6 +596,12 @@
     const maintenance = buttons.find((button) => /manuten/i.test(button.text));
     const extraButtons = buttons.filter((button) => button !== maintenance);
 
+    // Nada de botão dentro da faixa do grid: ele fica escondido atrás.
+    const gridFloor = documentGrids.length
+      ? Math.max(...documentGrids.map((grid) => grid.gridLineEnd)) + 2
+      : 0;
+    const pushDown = (line) => Math.max(line, gridFloor);
+
     const bottom = Math.max(
       0,
       ...components.map((item) => item.bottom),
@@ -623,13 +629,18 @@
         useTabs: documentTabs.length > 0,
         useRules: true,
         useBtnManter: Boolean(maintenance),
-        btnManterLine: maintenance ? toLine(maintenance.y) : undefined,
+        btnManterLine: maintenance ? pushDown(toLine(maintenance.y)) : undefined,
         btnManterColumn: maintenance ? toColumn(maintenance.x) : undefined,
         rgRoutineName: `${routineName}RG`,
         entityName: title,
         globalName: routineName,
         width: columns,
-        height: Math.max(20, Math.round(bottom / cellHeight) + 2)
+        height: Math.max(
+          20,
+          Math.round(bottom / cellHeight) + 2,
+          gridFloor + (buttons.length ? 2 : 0),
+          ...buttons.map((button) => pushDown(toLine(button.y)) + 2)
+        )
       },
       tabs: documentTabs,
       fields,
@@ -638,7 +649,7 @@
         location: "parent",
         text: button.text || `Botão ${index + 1}`,
         positionMode: "manual",
-        line: toLine(button.y),
+        line: pushDown(toLine(button.y)),
         column: toColumn(button.x),
         size: Math.max(8, toSize(button.width)),
         buttonId: `bt${app.utils

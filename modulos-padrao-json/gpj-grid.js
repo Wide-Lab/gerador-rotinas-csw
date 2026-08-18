@@ -271,7 +271,7 @@
       gridAllowRemove: overrides.gridAllowRemove !== false,
       gridRowEnter: overrides.gridRowEnter !== false,
       gridUseConsultButton: overrides.gridUseConsultButton !== false,
-      gridConsultButtonColumn: Number(overrides.gridConsultButtonColumn) || 50,
+      gridConsultButtonColumn: Number(overrides.gridConsultButtonColumn) || 86,
       gridConsultButtonLine: Number(overrides.gridConsultButtonLine) || 1
     };
   }
@@ -359,7 +359,7 @@
       gridAllowRemove: el.gridAllowRemove.checked,
       gridRowEnter: el.gridRowEnter.checked,
       gridUseConsultButton: el.gridUseConsultButton?.checked !== false,
-      gridConsultButtonColumn: Number(el.gridConsultButtonColumn?.value) || 50,
+      gridConsultButtonColumn: Number(el.gridConsultButtonColumn?.value) || 86,
       gridConsultButtonLine: Number(el.gridConsultButtonLine?.value) || 1
     };
   }
@@ -388,7 +388,7 @@
     el.gridAllowRemove.checked = settings.gridAllowRemove !== false;
     el.gridRowEnter.checked = settings.gridRowEnter !== false;
     if (el.gridUseConsultButton) el.gridUseConsultButton.checked = settings.gridUseConsultButton !== false;
-    if (el.gridConsultButtonColumn) el.gridConsultButtonColumn.value = settings.gridConsultButtonColumn || 50;
+    if (el.gridConsultButtonColumn) el.gridConsultButtonColumn.value = settings.gridConsultButtonColumn || 86;
     if (el.gridConsultButtonLine) el.gridConsultButtonLine.value = settings.gridConsultButtonLine || 1;
 
     if (el.gridMaintenanceOptions) {

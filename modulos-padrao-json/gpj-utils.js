@@ -362,7 +362,7 @@
       gridAllowRemove: e.gridAllowRemove.checked,
       gridRowEnter: e.gridRowEnter.checked,
       gridUseConsultButton: e.gridUseConsultButton?.checked !== false,
-      gridConsultButtonColumn: Number(e.gridConsultButtonColumn?.value) || 50,
+      gridConsultButtonColumn: Number(e.gridConsultButtonColumn?.value) || 86,
       gridConsultButtonLine: Number(e.gridConsultButtonLine?.value) || 1,
 
       customButtons:
