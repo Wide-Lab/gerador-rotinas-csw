@@ -993,9 +993,24 @@
       app.getConfig();
 
     if (config.routineMode === "grid") {
-      return config.useRules
-        ? app.grid.generateRulesFor("parent", config)
-        : "; Rotina RG desabilitada.";
+      if (!config.useRules) return "; Rotina RG desabilitada.";
+
+      const gridRules = app.grid.generateRulesFor("parent", config);
+      const tables = [];
+      appendGeneratedTables(tables);
+
+      if (!tables.length) return gridRules;
+
+      // As tabelas entram antes do bloco de tags, que fecha a rotina.
+      const lines = gridRules.split("\n");
+      const marker = lines.findIndex((line) => line.includes("; Tags CSW"));
+      const tail = lines.findIndex((line) => line.includes("csw:csp:"));
+      const cut = marker >= 0 ? marker : tail >= 0 ? tail - 1 : lines.length;
+      return [
+        ...lines.slice(0, cut),
+        ...tables,
+        ...lines.slice(cut)
+      ].join("\n");
     }
 
     if (!config.useRules) {

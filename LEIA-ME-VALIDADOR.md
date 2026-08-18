@@ -74,3 +74,31 @@ o código gerado — é só diagnóstico.
 - linha final menor que a inicial, grid estourando a altura do local;
 - grid sem coluna chave, manutenção inline sem coluna editável;
 - coluna com variável inválida/repetida ou sem piece.
+
+## Correção — tabela de opções na RG de consulta com grid
+
+Numa rotina do tipo *Consulta com Grid*, a RG principal era substituída inteira pela RG do
+grid. Como as duas têm o mesmo nome (`<ROTINA>RG`), os labels das tabelas de opção
+(combo, radio, checkbox) sumiam: a interface chamava
+
+```objectscript
+set sc=$$ObterTabOpcao^WDOMTESTE12RG(.TABOPC)
+```
+
+e o label `ObterTabOpcao` não existia na RG gerada — a rotina não compilava.
+
+Agora, em modo grid, os blocos `ObterTab<X>` são acrescentados à RG do grid, antes do
+bloco de tags CSW que fecha a rotina:
+
+```objectscript
+	; Obter Tabela Opção
+ObterTabOpcao(tabOpcao)	;
+	;
+	kill tabOpcao
+	;
+	set tabOpcao(0)="Vigente"
+	set tabOpcao(1)="Não Vigente"
+	set tabOpcao(2)="Todos"
+	;
+	quit $$$OK
+```
