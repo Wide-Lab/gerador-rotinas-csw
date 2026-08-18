@@ -329,3 +329,33 @@ da janela cresce junto para caber a barra de botões.
 
 No JSON de `WDWDNEW015`: grid nas linhas 4 a 21, botões que caíam na 22 (em cima do rodapé
 do grid) passam para a 23, e a janela vai de 24 para 25 linhas. O validador fica limpo.
+
+---
+
+## Sétima rodada — grade pelo formulário, leitura sob demanda e CSV
+
+**A grade sai do formulário, não do print inteiro.** A altura da linha era estimada com
+todo o texto da imagem — o rodapé do grid, os ícones e o texto picado puxavam o valor para
+baixo, e o resultado era campo com linha em branco no meio e grid ocupando o dobro das
+linhas. Agora ela vem do **menor espaçamento entre as linhas logo acima da tabela**, que é
+onde ficam os campos. Um valor fora da faixa de 12 a 60 pixels é descartado.
+
+Efeito na tela do Ágio, comparando com a `WDOMCPG258` de verdade:
+
+| item | rotina real | antes | agora |
+|---|---|---|---|
+| janela | 108x27 | 108x36 | **108x26** |
+| Empresa | linha 1 | linha 2 | **linha 1** |
+| Vigência (radio) | linha 2, coluna 78 | linha 3 | **linha 2, coluna 78** |
+| Grid | LinPos 3 | linha 4 | **linha 3** |
+
+**Leitura sob demanda no traçado manual.** Ao marcar uma área que o OCR não leu (uma
+opção, um botão, uma coluna que ele pulou), o recorte é relido na hora: ampliado 4x, em
+modo de linha única e invertido quando o fundo da área é escuro. Se ainda assim não sair
+uma palavra legível, fica o nome genérico em vez de um rótulo com lixo.
+
+**`Csv` com o nome da coluna.** A tag do grid saía `Csv=^1` (o número do piece); a rotina
+escrita à mão usa `Csv=^Material`, `Csv=^Data Início`. Agora o gerador emite o título.
+
+**Botão Consultar não desce.** O empurrão para baixo do grid vale só para botões que caem
+dentro da faixa dele; `Consultar` e `Limpar`, que ficam acima, continuam na linha original.

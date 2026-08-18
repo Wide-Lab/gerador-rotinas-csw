@@ -600,7 +600,11 @@
     const gridFloor = documentGrids.length
       ? Math.max(...documentGrids.map((grid) => grid.gridLineEnd)) + 2
       : 0;
-    const pushDown = (line) => Math.max(line, gridFloor);
+    const gridTop = documentGrids.length
+      ? Math.min(...documentGrids.map((grid) => grid.gridLinePosition))
+      : Infinity;
+    // Botão acima do grid (Consultar, Limpar) fica onde está.
+    const pushDown = (line) => (line < gridTop ? line : Math.max(line, gridFloor));
 
     const bottom = Math.max(
       0,

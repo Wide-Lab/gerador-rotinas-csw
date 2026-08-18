@@ -237,7 +237,7 @@
 
   // Recorta uma faixa escura, inverte e amplia: texto claro sobre fundo
   // escuro só é lido assim.
-  function croppedInverted(band, scale = 4) {
+  function croppedRegion(band, scale = 4, invert = true) {
     const margin = 6;
     const width = Math.max(1, Math.round(band.x1 - band.x0));
     const height = Math.max(1, Math.round(band.y1 - band.y0));
@@ -259,13 +259,15 @@
     );
 
     // Só inverte. Binarizar destrói os glifos finos do botão.
-    const pixels = sourceCtx.getImageData(0, 0, width, height);
-    for (let position = 0; position < pixels.data.length; position += 4) {
-      pixels.data[position] = 255 - pixels.data[position];
-      pixels.data[position + 1] = 255 - pixels.data[position + 1];
-      pixels.data[position + 2] = 255 - pixels.data[position + 2];
+    if (invert) {
+      const pixels = sourceCtx.getImageData(0, 0, width, height);
+      for (let position = 0; position < pixels.data.length; position += 4) {
+        pixels.data[position] = 255 - pixels.data[position];
+        pixels.data[position + 1] = 255 - pixels.data[position + 1];
+        pixels.data[position + 2] = 255 - pixels.data[position + 2];
+      }
+      sourceCtx.putImageData(pixels, 0, 0);
     }
-    sourceCtx.putImageData(pixels, 0, 0);
 
     const target = document.createElement("canvas");
     target.width = width * scale + margin * 2;
@@ -348,7 +350,7 @@
       const band = bands[index];
 
       try {
-        const reading = await worker.recognize(croppedInverted(band), {}, { text: true });
+        const reading = await worker.recognize(croppedRegion(band), {}, { text: true });
         const text = String(reading.data.text || "")
           .replace(/\s+/g, " ")
           .trim();
@@ -854,7 +856,8 @@
           let maxY = -1;
 
           for (let x = from; x <= to; x += 1) {
-            for (let y = middle - lh * 0.45; y <= middle + lh * 0.45; y += 1) {
+            const half = Math.max(4, (bbox.y1 - bbox.y0) * 0.75);
+            for (let y = middle - half; y <= middle + half; y += 1) {
               // O contorno do radio/checkbox é um traço claro; comparar por
               // fração do fundo deixava ele passar batido.
               if (page - luminance(x, y) > 25) {
@@ -1705,6 +1708,34 @@
     };
   }
 
+  // Espaçamento das linhas do formulário: só a faixa entre o cabeçalho da
+  // janela e o topo da tabela, que é onde ficam os campos.
+  function formLineHeight(lines, table) {
+    const floor = table ? table.top : view.image.naturalHeight;
+
+    // As linhas logo acima da tabela são os campos do formulário; o menor
+    // espaçamento entre elas é a altura de uma linha da tela.
+    const tops = lines
+      .filter((line) => line.bottom < floor)
+      .map((line) => line.top)
+      .sort((a, b) => a - b)
+      .slice(-4);
+
+    const gaps = [];
+    for (let index = 1; index < tops.length; index += 1) {
+      const gap = tops[index] - tops[index - 1];
+      if (gap > 6) gaps.push(gap);
+    }
+
+    if (!gaps.length) return 0;
+
+    // Espaçamento absurdo (bloco distante, título solto) não serve de grade.
+    const smallest = Math.min(...gaps);
+    return smallest >= 12 && smallest <= 60 ? smallest : 0;
+  }
+
+  const tabsPlaceholder = [];
+
   function analyze() {
     if (!view.words.length || !view.image) {
       view.rows = [];
@@ -1725,6 +1756,15 @@
     let lines = lineModel(area);
     let table = detectTable(lines) || detectTableByRules(lines, probe, area);
     let tabs = detectTabs(lines, table, probe);
+
+    const formHeight = formLineHeight(lines, table);
+    view.formHeight = formHeight;
+    if (formHeight > 0) {
+      view.calibration.lines = Math.max(
+        8,
+        Math.round(view.image.naturalHeight / formHeight)
+      );
+    }
 
     // A origem é o topo da primeira linha de conteúdo depois do cabeçalho:
     // a régua fica um pouco acima e jogava tudo uma linha para baixo.
@@ -2276,6 +2316,60 @@
     return grid;
   }
 
+  // No traçado manual o texto sai do OCR já feito; quando a área não tem
+  // nada lido (opção, botão, coluna que o OCR pulou), vale a pena reler só
+  // aquele pedaço, ampliado.
+  async function readBoxText(box) {
+    const known = textInsideBox(box);
+    if (known) return known;
+
+    if (!workerPromise || !view.image) return "";
+
+    try {
+      const worker = await tesseractWorker();
+      const padded = {
+        x0: Math.max(0, box.x0 - 2),
+        y0: Math.max(0, box.y0 - 2),
+        x1: Math.min(view.image.naturalWidth, box.x1 + 2),
+        y1: Math.min(view.image.naturalHeight, box.y1 + 2)
+      };
+
+      // A inversão é decidida pelo miolo da área marcada: o fundo em volta de
+      // um botão é claro e enganava a medida.
+      const probe = backgroundProbe();
+      const dark = probe
+        ? probe.averageLuminance(padded.y0, padded.y1, padded.x0, padded.x1) <
+          probe.page * 0.72
+        : false;
+
+      // A área marcada é uma linha de texto só.
+      try {
+        await worker.setParameters({ tessedit_pageseg_mode: "7" });
+      } catch (error) {
+        // Motor antigo ignora o parâmetro.
+      }
+
+      const reading = await worker.recognize(
+        croppedRegion(padded, 4, dark),
+        {},
+        { text: true }
+      );
+
+      const text = String(reading.data.text || "")
+        .replace(/s+/g, " ")
+        .trim();
+
+      // Só vale se saiu uma palavra de verdade; senão o nome genérico é
+      // melhor do que um rótulo com lixo de OCR.
+      return text.split(/s+/).some((word) => /^[A-Za-zÀ-ÿ]{5,}$/.test(word))
+        ? text
+        : "";
+    } catch (error) {
+      setStatus(`Não consegui ler a área marcada (${error.message}).`);
+      return "";
+    }
+  }
+
   function bindCanvas() {
     let start = null;
 
@@ -2306,7 +2400,7 @@
       draw();
     });
 
-    canvas.addEventListener("mouseup", () => {
+    canvas.addEventListener("mouseup", async () => {
       if (!start || !view.pending) return;
 
       const rect = view.pending.rect;
@@ -2340,7 +2434,8 @@
       }
 
       if (view.mode === "botao") {
-        const text = textInsideBox(box) || `Botão ${view.buttons.length + 1}`;
+        setStatus("Lendo o texto marcado…");
+        const text = (await readBoxText(box)) || `Botão ${view.buttons.length + 1}`;
         view.buttons.push({
           id: app.utils.createId(),
           include: true,
@@ -2357,7 +2452,8 @@
       }
 
       if (view.mode === "aba") {
-        const title = textInsideBox(box) || `Aba ${view.tabs.length + 1}`;
+        setStatus("Lendo o texto marcado…");
+        const title = (await readBoxText(box)) || `Aba ${view.tabs.length + 1}`;
         view.tabs.push({
           id: app.utils.createId(),
           include: true,
@@ -2372,7 +2468,8 @@
       }
 
       if (view.pending.step === "label") {
-        const description = textInsideBox(box) || `Campo ${view.rows.length + 1}`;
+        setStatus("Lendo o texto marcado…");
+        const description = (await readBoxText(box)) || `Campo ${view.rows.length + 1}`;
         const used = new Set(view.rows.map((row) => row.variable));
 
         view.pending.row = {
@@ -2477,7 +2574,10 @@
     // O grid ocupa a faixa dele inteira (inclusive o rodapé de navegação); um
     // botão dentro dessa faixa fica escondido atrás do grid.
     const gridFloor = grid ? grid.gridLineEnd + 2 : 0;
-    const pushDown = (line) => Math.max(line, gridFloor);
+    const gridTop = grid ? grid.gridLinePosition : Infinity;
+    // Botão acima do grid (Consultar, Limpar) fica onde está; só o que cai
+    // dentro da faixa do grid precisa descer.
+    const pushDown = (line) => (line < gridTop ? line : Math.max(line, gridFloor));
 
     return {
       routine: {

@@ -2666,7 +2666,7 @@
         return;
       }
       const staticSuffix = config.gridMaintenance && column.editable ? "^^^1" : "";
-      lines.push(`\tset TABGRID(${config.gridCode},${piece})="; csw:gridCols:cod=${config.gridCode}; Tipo=${column.type}; Csw=${column.width}^${u.escapeMac(column.title)}^${piece}${staticSuffix}; List=^^${piece}; Csv=^${piece};"`);
+      lines.push(`\tset TABGRID(${config.gridCode},${piece})="; csw:gridCols:cod=${config.gridCode}; Tipo=${column.type}; Csw=${column.width}^${u.escapeMac(column.title)}^${piece}${staticSuffix}; List=^^${piece}; Csv=^${u.escapeMac(column.title)};"`);
     });
 
     lines.push("\t;");
