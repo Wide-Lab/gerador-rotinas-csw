@@ -244,3 +244,33 @@ E um botão na mesma linha de um campo não apaga mais o campo.
 A tela do Ágio gera `WDOMAGI010` em modo *Consulta com Grid*, com o fluxo
 `Limpar^%CSW1GRID` → `GerarGrid^WDOMAGI010RG` → `Movimentar^%CSW1GRID`, e passa no
 validador sem nenhum apontamento.
+
+---
+
+## Quarta rodada — radios e o título da janela
+
+**Radio agora é um campo só, com as opções.** O módulo mede a marca desenhada à esquerda
+de cada texto e classifica pela forma: no quadrado a borda passa pelos cantos da caixa
+envolvente, no círculo os cantos ficam vazios. Quadrado → `checkbox` (um campo por
+opção); redondo → um único campo `radio` com a tabela de opções montada.
+
+Dois detalhes que faziam a leitura falhar:
+
+- o contorno do radio é um traço **claro** (~200 de luminância num fundo 255); comparar
+  por fração do fundo deixava ele passar batido — agora a comparação é por diferença;
+- a busca da marca parava dentro da palavra anterior da linha, e a letra entrava na caixa
+  do marcador estragando a forma; agora ela respeita o fim da palavra anterior.
+
+Resultado na tela do Ágio: um campo `radio` com **Vigente / Não Vigente / Todos**. Na tela
+do Camanuf continuam saindo dois `checkbox` (Inativo e Ativo), que é o desenho correto de lá.
+
+**Título da janela não vira mais campo.** Depender de "as duas primeiras linhas" falhava
+porque o OCR quebra o título em três ou quatro pedaços. Agora o cabeçalho da janela
+termina na **régua horizontal desenhada** logo abaixo do caminho (`y=87` na tela do Ágio,
+`y=160` na versão com navegador). Acima dela só sobrevive label com valor **colado** ao
+lado — assim o filtro `Empresa 22` continua virando campo e o título, que tem a versão do
+ERP na outra ponta da linha, não.
+
+**Confiança do OCR.** Cada campo carrega a confiança média da leitura; abaixo de 70 ele
+entra na lista **desmarcado**. O lixo de OCR aparece para conferência, mas não vai para o
+projeto sem alguém olhar.
