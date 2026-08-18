@@ -32,6 +32,7 @@
     grid: null,
     tabs: [],
     buttons: [],
+    origin: { x: 0, y: 0 },
     calibration: { columns: 108, lines: 28 },
     pending: null,
     mode: "campo"
@@ -66,9 +67,13 @@
     return view.image.naturalHeight / Math.max(1, view.calibration.lines);
   }
 
-  const toColumn = (x) => Math.max(1, Math.round(x / charWidth()) + 1);
+  const toColumn = (x) =>
+    Math.max(1, Math.round((x - (view.origin?.x || 0)) / charWidth()) + 1);
   const toLine = (y, height = 0) =>
-    Math.max(1, Math.floor((y + height / 2) / lineHeight()) + 1);
+    Math.max(
+      1,
+      Math.floor((y + height / 2 - (view.origin?.y || 0)) / lineHeight()) + 1
+    );
   const toSize = (width) => Math.max(1, Math.round(width / charWidth()));
 
   function median(values) {
@@ -509,7 +514,8 @@
   function columnTypeFromTitle(title) {
     const name = String(title || "").toLowerCase();
     if (/data|dt|previs|vencim|emiss|entrega/.test(name)) return "d";
-    if (/quantidade|qtd|valor|preco|preço|percent|perc.|%|saldo|peso|agio|ágio/.test(name)) return "v3";
+    if (/percent|perc.|%|agio|ágio|aliquota|alíquota/.test(name)) return "v2";
+    if (/quantidade|qtd|valor|preco|preço|saldo|peso/.test(name)) return "v3";
     if (/codigo|código|numero|número|num|seq|linha|op|pedido/.test(name)) return "n";
     return "a";
   }
@@ -658,7 +664,7 @@
       return {
         title: cleanTitle(titleWords.map((word) => word.text).join(" ")),
         start: cluster.start,
-        width: Math.max(3, toSize(limit - cluster.start) - 1),
+        width: Math.max(3, toSize(limit - cluster.start)),
         type: columnTypeFromValues(values),
         samples: values.slice(0, 3)
       };
@@ -1115,8 +1121,16 @@
 
       const bounds =
         verticals.length >= 3
-          ? verticals
+          ? verticals.slice()
           : header.runs.map((run) => run.bbox.x0 - charWidth() * 0.5);
+
+      // A borda esquerda da tabela raramente aparece como régua (encosta na
+      // margem da tela). Sem ela a primeira coluna do cabeçalho fica fora de
+      // todas as faixas e some — foi o caso da coluna "Material".
+      const firstText = header.runs[0] ? header.runs[0].bbox.x0 : null;
+      if (firstText !== null && bounds.length && firstText < bounds[0] - charWidth() * 0.6) {
+        bounds.unshift(Math.max(area.left, Math.min(firstText - charWidth() * 0.5, top.x0)));
+      }
 
       const right = Math.min(area.right, Math.max(...bounds, header.runs[header.runs.length - 1].bbox.x1));
 
@@ -1145,7 +1159,7 @@
           return {
             title: cleanTitle(words.map((word) => word.text).join(" ")),
             start,
-            width: Math.max(3, toSize(limit - start) - 1),
+            width: Math.max(3, toSize(limit - start)),
             type: values.length
               ? columnTypeFromValues(values)
               : columnTypeFromTitle(cleanTitle(words.map((word) => word.text).join(" "))),
@@ -1184,6 +1198,9 @@
 
       return readings
         .filter((reading) => !insideTable(reading.band))
+        // A faixa colorida do topo do ERP também é escura e larga, mas está
+        // acima da área útil da rotina.
+        .filter((reading) => reading.band.y1 > (view.origin?.y || 0))
         .filter((reading) => toSize(reading.band.x1 - reading.band.x0) >= 8)
         .map((reading) => ({
           id: app.utils.createId(),
@@ -1357,17 +1374,8 @@
     return "";
   }
 
-  function detectFields(lines, table, tabs, buttons, probe) {
-    const used = new Set();
-    const rows = [];
-    const consumed = [...buttons, ...tabs].map((item) => item.textBox || item.box);
-
-    const isConsumed = (run) =>
-      consumed.some((box) => run.bbox.x0 === box.x0 && run.bbox.y0 === box.y0);
-
-    // Cabeçalho da janela: a primeira linha é o título e a segunda costuma
-    // ser o caminho, que repete o título. Só isso é descartado — um filtro
-    // acima da tira de abas (como o campo Empresa) continua sendo campo.
+  // Onde termina o cabeçalho da janela (título, caminho, versão do ERP).
+  function headerCeiling(lines, table, tabs, probe) {
     const flatten = (line) =>
       line.runs
         .map((run) => run.text)
@@ -1375,24 +1383,22 @@
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "");
 
-    const tabsTop = tabs.length ? Math.min(...tabs.map((tab) => tab.box.y0)) : null;
-
     let ceiling = lines.length ? lines[0].bottom : 0;
+
     if (lines[1]) {
       const first = flatten(lines[0]);
       const second = flatten(lines[1]);
       const repeats =
-        first.length > 6 && second.length > 6 &&
+        first.length > 6 &&
+        second.length > 6 &&
         (first.includes(second) || second.includes(first));
       if (repeats) ceiling = lines[1].bottom;
     }
 
-    // O cabeçalho da janela termina numa régua desenhada. Depender de "as duas
-    // primeiras linhas" falhava porque o OCR quebra o título em várias.
     if (probe && typeof probe.rules === "function") {
       const limit = Math.min(
         table ? table.top : Infinity,
-        tabsTop !== null ? tabsTop : Infinity,
+        tabs.length ? Math.min(...tabs.map((tab) => tab.box.y0)) : Infinity,
         view.image.naturalHeight * 0.35
       );
 
@@ -1402,6 +1408,27 @@
 
       if (above.length) ceiling = Math.max(ceiling, above[above.length - 1].y);
     }
+
+    return ceiling;
+  }
+
+  function detectFields(lines, table, tabs, buttons, probe, ceiling) {
+    const used = new Set();
+    const rows = [];
+    const consumed = [...buttons, ...tabs].map((item) => item.textBox || item.box);
+
+    // Comparar coordenada exata falhava quando o run agrupava várias palavras
+    // já consumidas (as opções de um radio, por exemplo).
+    const isConsumed = (run) =>
+      consumed.some(
+        (box) =>
+          run.bbox.x0 < box.x1 &&
+          box.x0 < run.bbox.x1 &&
+          run.bbox.y0 < box.y1 &&
+          box.y0 < run.bbox.y1
+      );
+
+    const tabsTop = tabs.length ? Math.min(...tabs.map((tab) => tab.box.y0)) : null;
 
     lines.forEach((line) => {
       if (table && line.top >= table.top - 2 && line.bottom <= table.bottom + 2) return;
@@ -1420,27 +1447,35 @@
       const group = !inHeader ? markerGroup(line, probe) : null;
 
       if (group && group.kind === "radio") {
-        const description = group.options.map((option) => option.text).join(" / ");
-        const variable = helpers().variableFromDescription(
-          group.options[0].text || "opcao",
-          used
-        );
+        const before = line.runs
+          .filter(
+            (run) =>
+              run.bbox.x1 <= group.left - charWidth() * 0.5 &&
+              // Texto distante na mesma linha é outro campo, não o nome do grupo.
+              group.left - run.bbox.x1 <= charWidth() * 6 &&
+              /[A-Za-zÀ-ÿ]{3,}/.test(run.text)
+          )
+          .sort((a, b) => b.bbox.x1 - a.bbox.x1)[0];
+
+        const description = cleanTitle(before ? before.text : "") || "Opção";
+        const variable = helpers().variableFromDescription(description, used);
+
+        const inputColumn = toColumn(group.left);
+        const labelSize = Math.max(4, description.length);
 
         rows.push({
           id: app.utils.createId(),
           include: true,
           origin: "ocr",
-          description: group.options[0].text
-            ? `Opção (${description})`
-            : "Opção",
+          description,
           variable,
           type: "radio",
           required: false,
           isKey: false,
           labelLine: toLine(line.top, line.bottom - line.top),
-          labelColumn: Math.max(1, toColumn(group.left) - 1),
-          labelSize: 8,
-          inputColumn: toColumn(group.left),
+          labelColumn: Math.max(1, inputColumn - labelSize - 1),
+          labelSize,
+          inputColumn,
           inputSize: Math.max(10, toSize(group.right - group.left)),
           optionsVariable: `TAB${variable}`.slice(0, 20),
           createOptionsTable: true,
@@ -1452,7 +1487,9 @@
           box: { x0: group.left, y0: line.top, x1: group.right, y1: line.bottom }
         });
 
-        return;
+        // Só as opções são consumidas: um campo antes delas na mesma linha
+        // continua virando campo.
+        group.options.forEach((option) => consumed.push(option.box));
       }
 
       const runs = line.runs;
@@ -1515,7 +1552,11 @@
         const valueIsClose =
           nextIsValue && next.bbox.x0 - run.bbox.x1 <= charWidth() * 3;
 
-        if (inHeader && !valueIsClose) {
+        // O OCR às vezes cola o valor no label ("Empresa[22"); isso também é
+        // um campo, não parte do título.
+        const embeddedValue = /[A-Za-zÀ-ÿ]{3,}[^A-Za-z0-9]?\d+/.test(raw);
+
+        if (inHeader && !valueIsClose && !embeddedValue) {
           index += 1;
           continue;
         }
@@ -1556,10 +1597,10 @@
         rows.push({
           id: app.utils.createId(),
           // Leitura duvidosa entra desmarcada: o usuário confere antes de usar.
+          // A linha 1 já é conteúdo: o cabeçalho da janela foi descartado
+          // antes, pela régua.
           include:
-            (nextIsValue || freeSpace > charWidth() * 3) &&
-            lineNumber > 1 &&
-            confidence >= 70,
+            (nextIsValue || freeSpace > charWidth() * 3) && confidence >= 70,
           confidence: Math.round(confidence),
           origin: "ocr",
           description,
@@ -1677,19 +1718,34 @@
     const probe = backgroundProbe();
     const area = usableArea(probe);
     view.area = area;
+    view.origin = { x: area.left, y: 0 };
 
-    const lines = lineModel(area);
-    // O alinhamento do texto resolve a tabela com dados; as bordas desenhadas
-    // entram quando a tabela está vazia e só tem cabeçalho.
-    const table = detectTable(lines) || detectTableByRules(lines, probe, area);
+    // Primeira passada só para achar onde termina o cabeçalho da janela; a
+    // segunda já mede tudo a partir dali, que é a linha 1 da rotina.
+    let lines = lineModel(area);
+    let table = detectTable(lines) || detectTableByRules(lines, probe, area);
+    let tabs = detectTabs(lines, table, probe);
+
+    // A origem é o topo da primeira linha de conteúdo depois do cabeçalho:
+    // a régua fica um pouco acima e jogava tudo uma linha para baixo.
+    const ceilingFirst = headerCeiling(lines, table, tabs, probe);
+    const firstContent = lines.find((line) => line.top > ceilingFirst + 2);
+    view.origin = {
+      x: area.left,
+      y: firstContent ? firstContent.top - lineHeight() * 0.15 : ceilingFirst
+    };
+
+    lines = lineModel(area);
+    table = detectTable(lines) || detectTableByRules(lines, probe, area);
     const buttons = detectButtons(lines, table, probe);
-    const tabs = detectTabs(lines, table, probe);
+    tabs = detectTabs(lines, table, probe);
+    const ceiling = headerCeiling(lines, table, tabs, probe);
 
     view.table = table;
     view.grid = gridFromRegion(table, probe);
     view.tabs = tabs;
     view.buttons = buttons;
-    view.rows = detectFields(lines, table, tabs, buttons, probe);
+    view.rows = detectFields(lines, table, tabs, buttons, probe, ceiling);
   }
 
   // Mantido pelo nome antigo: continua devolvendo só os campos.
@@ -2433,7 +2489,8 @@
         entityName: title,
         globalName: routineName,
         width: view.calibration.columns,
-        height: view.calibration.lines
+        // A janela começa na primeira linha útil, não no topo do print.
+        height: Math.max(20, toLine(view.image.naturalHeight, 0))
       },
       tabs: documentTabs,
       grids: grid ? [grid] : [],
@@ -2447,6 +2504,14 @@
         buttonId: `bt${app.utils.normalizeVariable(button.text, `BOTAO${index + 1}`).slice(0, 18)}`
       })),
       fields: rows.map((row) => ({
+        // Tabela de opções montada na leitura (radio, combo, checkbox).
+        ...(row.optionsItems
+          ? {
+              optionsVariable: row.optionsVariable,
+              createOptionsTable: true,
+              optionsItems: row.optionsItems
+            }
+          : {}),
         description: row.description,
         variable: app.utils.normalizeVariable(row.variable, "CAMPO"),
         type: row.type,
@@ -2486,6 +2551,13 @@
 
     rows.forEach((row) => {
       const field = app.fields.createField({
+        ...(row.optionsItems
+          ? {
+              optionsVariable: row.optionsVariable,
+              createOptionsTable: true,
+              optionsItems: row.optionsItems
+            }
+          : {}),
         description: row.description,
         variable: app.utils.normalizeVariable(row.variable, "CAMPO"),
         type: row.type,

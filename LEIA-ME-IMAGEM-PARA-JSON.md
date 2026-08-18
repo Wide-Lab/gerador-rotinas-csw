@@ -274,3 +274,42 @@ ERP na outra ponta da linha, não.
 **Confiança do OCR.** Cada campo carrega a confiança média da leitura; abaixo de 70 ele
 entra na lista **desmarcado**. O lixo de OCR aparece para conferência, mas não vai para o
 projeto sem alguém olhar.
+
+---
+
+## Quinta rodada — conferido contra a rotina de verdade
+
+A rotina `WDOMCPG258` existe no projeto, então dessa vez deu para comparar o resultado com
+o gabarito em vez de só olhar a tela.
+
+**Coluna que sumia.** A borda esquerda da tabela encosta na margem e não aparece como
+régua vertical, então a primeira coluna do cabeçalho ficava fora de todas as faixas —
+era por isso que `Material` desaparecia e `Histórico` virava `Coluna 7`. Agora, quando o
+primeiro título começa antes da primeira régua, um limite extra é criado à esquerda.
+
+**Origem da grade.** A linha 1 da rotina passou a ser a primeira linha útil do print, não
+o topo da imagem, e a coluna 1 é o começo do conteúdo (sem o menu lateral). Antes o
+cabeçalho do ERP virava dez linhas em branco no começo da tela gerada.
+
+**Largura da coluna** deixou de perder um caractere, e `percentual`/`ágio` passou a ser
+`v2` (duas casas) em vez de `v3`.
+
+### Comparação com `WDOMCPG258.mac`
+
+| item | rotina real | gerado |
+|---|---|---|
+| Empresa | linha 1, coluna 12 | linha 1, coluna 15 |
+| Vigência (radio) | linha 2, coluna 78, `,3,.TABVIG` | linha 3, coluna 78, `,3,.TABOPC` |
+| Grid | LinPos 3 | linha 4 |
+| Material | `Tipo=a  Csw=10` | `a, 10` |
+| Descrição | `Tipo=a  Csw=20` | `a, 20` |
+| Data Início | `Tipo=d  Csw=10` | `d, 10` |
+| Data Fim | `Tipo=d  Csw=10` | `d, 10` |
+| Perc. Ágio(%) | `Tipo=v2 Csw=8` | `v2, 8` |
+| Utilizado | `Tipo=a  Csw=6` | `a, 6` |
+| Histórico | `Tipo=a  Csw=30` | `a, 29` |
+
+As sete colunas do grid saem com título, tipo e largura praticamente iguais aos da rotina
+escrita à mão. O que sobra é uma linha de diferença na vertical (o print tem espaçamento
+maior entre os campos do que a grade fixa do CSW) e o nome do grupo de radio, que fica
+como `Opção` quando não há um label ao lado.
