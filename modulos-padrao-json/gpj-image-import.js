@@ -2657,6 +2657,42 @@
     };
   }
 
+  // Todos os botões de uma mesma linha ganham a mesma largura e o mesmo
+  // espaçamento — no print cada um tem um tamanho e a barra sai torta.
+  function alignButtonBar(entries, columns) {
+    const byLine = new Map();
+
+    entries.forEach((entry) => {
+      const list = byLine.get(entry.line) || [];
+      list.push(entry);
+      byLine.set(entry.line, list);
+    });
+
+    byLine.forEach((list) => {
+      if (list.length < 2) return;
+
+      list.sort((a, b) => a.column - b.column);
+
+      const gap = 1;
+      const start = Math.max(2, Math.min(...list.map((entry) => entry.column)));
+      const available = columns - start - gap * (list.length - 1);
+      const size = Math.max(
+        8,
+        Math.min(
+          Math.max(...list.map((entry) => entry.size)),
+          Math.floor(available / list.length)
+        )
+      );
+
+      let cursor = start;
+      list.forEach((entry) => {
+        entry.column = cursor;
+        entry.size = size;
+        cursor += size + gap;
+      });
+    });
+  }
+
   function buildDocument() {
     const rows = view.rows.filter((row) => row.include);
     const routineName = app.utils.normalizeVariable(
@@ -2669,10 +2705,45 @@
     const buttons = view.buttons.filter((button) => button.include);
     const hasGrid = Boolean(view.grid && view.grid.include);
 
+    const manutencao = buttons.find((button) => /manuten/i.test(button.text));
+    // O botão de consulta é gerado pela própria tela; não vira personalizado.
+    const consulta = buttons.filter((button) =>
+      /^(consultar?|pesquisar?|limpar|filtrar)$/i.test(button.text.trim())
+    );
+
     // Com tira de abas, o grid mora dentro da primeira aba — é assim que a
     // tela do ERP se organiza. Sem abas, o grid fica na rotina principal.
     const gridLocation = tabs.length ? "aba1" : "parent";
     const grid = gridDefinition(routineName, gridLocation, consulta);
+
+    const extraButtons = buttons.filter(
+      (button) => button !== manutencao && !consulta.includes(button)
+    );
+
+    // O grid ocupa a faixa dele inteira (inclusive o rodapé de navegação); um
+    // botão dentro dessa faixa fica escondido atrás do grid.
+    const gridFloor = grid ? grid.gridLineEnd + 2 : 0;
+    const gridTop = grid ? grid.gridLinePosition : Infinity;
+    const janela = view.calibration.columns;
+    // Botão acima do grid (Consultar, Limpar) fica onde está; só o que cai
+    // dentro da faixa do grid precisa descer.
+    const pushDown = (line) => (line < gridTop ? line : Math.max(line, gridFloor));
+
+    // Manutenção entra na fila com os outros para a barra não ficar furada.
+    const bar = buttons
+      .filter((button) => !consulta.includes(button))
+      .map((button, index) => ({
+        index,
+        text: button.text,
+        line: pushDown(button.line),
+        column: button.column,
+        size: button.size,
+        maintenance: button === manutencao
+      }));
+
+    alignButtonBar(bar, janela);
+
+    const manutencaoEntry = bar.find((entry) => entry.maintenance);
 
     const documentTabs = tabs.map((tab, index) => ({
       id: `aba${index + 1}`,
@@ -2684,22 +2755,6 @@
       contentType: index === 0 && grid ? "grid" : "fields"
     }));
 
-    const manutencao = buttons.find((button) => /manuten/i.test(button.text));
-    // O botão de consulta é gerado pela própria tela; não vira personalizado.
-    const consulta = buttons.filter((button) =>
-      /^(consultar?|pesquisar?|limpar|filtrar)$/i.test(button.text.trim())
-    );
-    const extraButtons = buttons.filter(
-      (button) => button !== manutencao && !consulta.includes(button)
-    );
-
-    // O grid ocupa a faixa dele inteira (inclusive o rodapé de navegação); um
-    // botão dentro dessa faixa fica escondido atrás do grid.
-    const gridFloor = grid ? grid.gridLineEnd + 2 : 0;
-    const gridTop = grid ? grid.gridLinePosition : Infinity;
-    // Botão acima do grid (Consultar, Limpar) fica onde está; só o que cai
-    // dentro da faixa do grid precisa descer.
-    const pushDown = (line) => (line < gridTop ? line : Math.max(line, gridFloor));
 
     return {
       routine: {
@@ -2709,9 +2764,9 @@
         dataVariable: routineName.slice(0, 8),
         useTabs: documentTabs.length > 0,
         useRules: true,
-        useBtnManter: Boolean(manutencao),
-        btnManterLine: manutencao ? pushDown(manutencao.line) : undefined,
-        btnManterColumn: manutencao ? manutencao.column : undefined,
+        useBtnManter: Boolean(manutencaoEntry),
+        btnManterLine: manutencaoEntry ? manutencaoEntry.line : undefined,
+        btnManterColumn: manutencaoEntry ? manutencaoEntry.column : undefined,
         rgRoutineName: `${routineName}RG`,
         entityName: title,
         globalName: routineName,
@@ -2727,14 +2782,16 @@
       },
       tabs: documentTabs,
       grids: grid ? [grid] : [],
-      buttons: extraButtons.map((button, index) => ({
+      buttons: bar.filter((entry) => !entry.maintenance).map((entry) => ({
         location: "parent",
-        text: button.text,
+        text: entry.text,
         positionMode: "manual",
-        line: pushDown(button.line),
-        column: button.column,
-        size: button.size,
-        buttonId: `bt${app.utils.normalizeVariable(button.text, `BOTAO${index + 1}`).slice(0, 18)}`
+        line: entry.line,
+        column: entry.column,
+        size: entry.size,
+        buttonId: `bt${app.utils
+          .normalizeVariable(entry.text, `BOTAO${entry.index + 1}`)
+          .slice(0, 18)}`
       })),
       fields: rows.map((row) => ({
         // Tabela de opções montada na leitura (radio, combo, checkbox).

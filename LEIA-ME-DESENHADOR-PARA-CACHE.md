@@ -188,3 +188,30 @@ gerado quando o desenho (ou o print) traz um botão chamado *Consultar*, *Pesqui
 
 Esses mesmos botões também deixaram de virar botões personalizados — antes o `Consultar`
 aparecia duas vezes na tela.
+
+---
+
+## Quarta rodada — barra de botões no padrão e folga do campo
+
+**Barra de botões alinhada.** No desenho cada botão tem uma largura diferente (200px,
+164px, 176px) e o `Manutenção`, ao virar o btnManter, deixava um buraco no meio da fila.
+Agora todos os botões de uma mesma linha recebem **a mesma largura e o mesmo
+espaçamento**, na ordem em que aparecem — e o btnManter entra na fila junto, ocupando o
+lugar dele.
+
+Antes e depois no `WDWDNEW015`:
+
+```
+antes:  Incluir(19) col 2 · [buraco] · Cancelar(19) col 40 · Excluir(15) col 59
+        · Importar(15) col 75 · Histórico(16) col 90
+depois: Incluir col 2 · Manutenção col 19 · Cancelar col 36 · Excluir col 53
+        · Importar col 70 · Histórico col 87   — todos com 16 de largura
+```
+
+Quando a soma não cabe na janela, a largura de cada um é reduzida para caber.
+
+**Folga entre o rótulo e o leitor.** O texto do label terminava colado na caixa; agora
+ficam duas colunas de respiro, como nas telas do ERP. O leitor também passou a ter um
+mínimo de 6 colunas, para um campo estreito no desenho não virar uma caixa inutilizável.
+
+O importador por imagem ganhou o mesmo alinhamento de barra.

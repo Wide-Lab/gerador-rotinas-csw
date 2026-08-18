@@ -283,6 +283,42 @@
     return columns;
   }
 
+  // Barra de botões: todos na mesma linha ganham a mesma largura e o mesmo
+  // espaçamento, na ordem em que aparecem no desenho.
+  function alignButtonBar(entries, columns) {
+    const byLine = new Map();
+
+    entries.forEach((entry) => {
+      const list = byLine.get(entry.line) || [];
+      list.push(entry);
+      byLine.set(entry.line, list);
+    });
+
+    byLine.forEach((list) => {
+      if (list.length < 2) return;
+
+      list.sort((a, b) => a.column - b.column);
+
+      const gap = 1;
+      const start = Math.max(2, Math.min(...list.map((entry) => entry.column)));
+      const available = columns - start - gap * (list.length - 1);
+      const size = Math.max(
+        8,
+        Math.min(
+          Math.max(...list.map((entry) => entry.size)),
+          Math.floor(available / list.length)
+        )
+      );
+
+      let cursor = start;
+      list.forEach((entry) => {
+        entry.column = cursor;
+        entry.size = size;
+        cursor += size + gap;
+      });
+    });
+  }
+
   // Empurra os elementos de cada linha para a direita até não colidirem.
   function reflowFields(fields, columns) {
     const byLine = new Map();
@@ -489,9 +525,10 @@
       const inputColumn = toColumn(input.x);
       const source = labelSourceFor(input);
       const wanted = Math.max(4, description.length + 1);
-      const rightEdge = source ? toColumn(source.right) : inputColumn - 1;
-      const labelColumn = Math.max(1, Math.min(rightEdge - wanted, inputColumn - 2));
-      const labelSize = Math.max(2, Math.min(wanted, inputColumn - 1 - labelColumn));
+      // Duas colunas de respiro entre o texto e a caixa, como nas telas do ERP.
+      const rightEdge = source ? toColumn(source.right) : inputColumn - 2;
+      const labelColumn = Math.max(1, Math.min(rightEdge - wanted, inputColumn - 3));
+      const labelSize = Math.max(2, Math.min(wanted, inputColumn - 2 - labelColumn));
 
       const field = {
         description,
@@ -507,7 +544,7 @@
         inputColumn,
         inputSize: isDisplayOnly
           ? 8
-          : Math.max(2, toSize(input.width) || helpers.defaultSize(type, description)),
+          : Math.max(6, toSize(input.width) || helpers.defaultSize(type, description)),
         hasDisplay: Boolean(display) && !["date", "textArea"].includes(type),
         displayLine: line,
         displayColumn: display ? toColumn(display.x) : inputColumn + toSize(input.width) + 2,
@@ -625,6 +662,23 @@
     // Botão acima do grid (Consultar, Limpar) fica onde está.
     const pushDown = (line) => (line < gridTop ? line : Math.max(line, gridFloor));
 
+    // Manutenção entra na fila junto com os outros para a barra não ficar
+    // com um buraco no lugar dela.
+    const bar = buttons
+      .filter((button) => !consult.includes(button))
+      .map((button, index) => ({
+        index,
+        text: button.text || `Botão ${index + 1}`,
+        line: pushDown(toLine(button.y)),
+        column: toColumn(button.x),
+        size: Math.max(8, toSize(button.width)),
+        maintenance: button === maintenance
+      }));
+
+    alignButtonBar(bar, columns);
+
+    const maintenanceEntry = bar.find((entry) => entry.maintenance);
+
     const bottom = Math.max(
       0,
       ...components.map((item) => item.bottom),
@@ -651,9 +705,9 @@
         dataVariable: routineName.slice(0, 8),
         useTabs: documentTabs.length > 0,
         useRules: true,
-        useBtnManter: Boolean(maintenance),
-        btnManterLine: maintenance ? pushDown(toLine(maintenance.y)) : undefined,
-        btnManterColumn: maintenance ? toColumn(maintenance.x) : undefined,
+        useBtnManter: Boolean(maintenanceEntry),
+        btnManterLine: maintenanceEntry ? maintenanceEntry.line : undefined,
+        btnManterColumn: maintenanceEntry ? maintenanceEntry.column : undefined,
         rgRoutineName: `${routineName}RG`,
         entityName: title,
         globalName: routineName,
@@ -670,15 +724,15 @@
       tabs: documentTabs,
       fields,
       grids: documentGrids,
-      buttons: extraButtons.map((button, index) => ({
+      buttons: bar.filter((entry) => !entry.maintenance).map((entry) => ({
         location: "parent",
-        text: button.text || `Botão ${index + 1}`,
+        text: entry.text,
         positionMode: "manual",
-        line: pushDown(toLine(button.y)),
-        column: toColumn(button.x),
-        size: Math.max(8, toSize(button.width)),
+        line: entry.line,
+        column: entry.column,
+        size: entry.size,
         buttonId: `bt${app.utils
-          .normalizeVariable(button.text, `BOTAO${index + 1}`)
+          .normalizeVariable(entry.text, `BOTAO${entry.index + 1}`)
           .slice(0, 18)}`
       })),
       indexes: fields
