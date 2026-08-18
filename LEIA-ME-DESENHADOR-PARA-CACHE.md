@@ -112,3 +112,58 @@ O JSON que eu tinha à mão é o do print (`id`, `name`, `components`, `x`, `y`,
 variável, obrigatoriedade, F7 escolhido, pieces, colunas do grid num formato próprio —
 me mande um JSON completo de uma tela que eu ligo esses campos direto, em vez de inferir
 pelo texto. O botão **Copiar JSON do gerador** ajuda a comparar o antes e o depois.
+
+---
+
+## Segunda rodada — com o JSON completo em mãos
+
+Com o JSON real de uma tela do desenhador ficou claro o que estava faltando.
+
+**`gridData`.** As colunas não estão em `components[].columns` e sim em
+`components[].gridData.columns`, com `title`, `field` e `dataType` — e as linhas de
+exemplo em `gridData.data`, indexadas pelo `field`. Era por isso que o grid saía vazio.
+Agora as colunas vêm completas e o **tipo sai das próprias linhas de exemplo**, que é bem
+mais confiável do que adivinhar pelo nome:
+
+| coluna | exemplo no desenho | tipo |
+|---|---|---|
+| Previsão de Entrega | `21/03/2025` | data |
+| Pedido | `35659` | número (e vira a chave do registro) |
+| Quantidade | `5,000` | decimal |
+| Cliente | `11888` | número |
+| Check (`dataType: "link"`) | — | coluna de marcação |
+
+**Label alinhado à direita.** No desenhador o texto do label é desenhado encostado na
+borda direita da caixa: `Período de` tem `x:22, width:100`, mas aparece colado no campo
+que começa em `x:127`. Usando o `x` cru, o label ia para o lugar errado e o campo vizinho
+(`Até`) ficava por cima. Agora a coluna é calculada a partir de `x + width`, andando para
+trás o tamanho do texto.
+
+**Reflow por linha.** O desenho usa fonte proporcional e a tela CSW é monoespaçada, então
+um label longo ocupa muito mais colunas do que pixels. Depois de converter, cada linha é
+reorganizada da esquerda para a direita e o display é encolhido se bater no fim da janela
+— o projeto sai sem nenhuma sobreposição.
+
+**Display sem leitor.** `Empresas Naturezas Estoque (Acabados)` é um Label + Display sem
+`Csle`, com um botão `+` ao lado. Esse par sumia; agora vira campo de **multi-seleção**
+com a tabela de selecionados já nomeada.
+
+**`f7` do Csle.** Quando o componente traz `"f7": "1"`, o campo é marcado como tendo
+consulta mesmo que o nome não case com nenhum preset do catálogo.
+
+**Radio.** Componente de opção vira campo `radio`; se o desenho trouxer a lista de
+opções, ela já sai como tabela de opções pronta (`createOptionsTable`), que é o que o
+gerador usa para emitir o `InicializaRadio^%CSW1A` no label `9000`.
+
+### Resultado com o JSON da tela `WDWDNEW010`
+
+```
+rotina WDWDNEW010, modo Consulta com Grid, janela 108x23
+campos: Período de(date) · Até · Finalidade(display) · Produto(display, F7 produto)
+        · Tipo de Nota(display, F7 tipo de nota) · Empresas Naturezas Estoque (multi-seleção)
+grid na linha 5, altura 16, ^mtempWDWDNEW010, 9 colunas:
+        (check) · Previsão de Entrega(d) · Pedido(n, chave) · Controle · OP(n)
+        · Engenharia · Engenharia OF · Quantidade(v3) · Cliente(n)
+Manutenção -> btnManter (linha 21) · Gerar Planejamento · Inclusão Engenharia · +
+validador: nenhum problema encontrado
+```

@@ -727,7 +727,7 @@
             }
           }
 
-          return lightest - darkest > 60 && darkest < page * 0.7;
+          return lightest - darkest > 25 && page - darkest > 25;
         },
 
         // Linhas desenhadas: bordas de tabela, divisórias de cabeçalho.
@@ -829,6 +829,54 @@
           }
 
           return last;
+        },
+
+        // "check" (quadrado), "radio" (redondo) ou "" (nada desenhado).
+        markerKind(bbox, reach = 2.8, floor = 0) {
+          const cw = charWidth();
+          const lh = lineHeight();
+          const middle = (bbox.y0 + bbox.y1) / 2;
+          // Não invadir a palavra anterior da linha, senão a letra dela entra
+          // na caixa do marcador e a forma deixa de ser quadrada.
+          const from = Math.max(floor, bbox.x0 - cw * reach);
+          const to = bbox.x0 - cw * 0.15;
+          if (from < 1 || to - from < 3) return "";
+
+          let minX = Infinity;
+          let maxX = -1;
+          let minY = Infinity;
+          let maxY = -1;
+
+          for (let x = from; x <= to; x += 1) {
+            for (let y = middle - lh * 0.45; y <= middle + lh * 0.45; y += 1) {
+              // O contorno do radio/checkbox é um traço claro; comparar por
+              // fração do fundo deixava ele passar batido.
+              if (page - luminance(x, y) > 25) {
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+              }
+            }
+          }
+
+          if (maxX < 0) return "";
+
+          const width = maxX - minX + 1;
+          const height = maxY - minY + 1;
+
+          if (width < 4 || height < 4) return "";
+          if (Math.abs(width - height) > Math.max(width, height) * 0.45) return "";
+
+          const corners = [
+            [minX, minY],
+            [maxX, minY],
+            [minX, maxY],
+            [maxX, maxY]
+          ];
+          const empty = corners.filter(([x, y]) => page - luminance(x, y) <= 25).length;
+
+          return empty >= 3 ? "radio" : "check";
         },
 
         // Retângulos escuros da tela — em geral os botões.
@@ -1182,10 +1230,81 @@
     return buttons;
   }
 
+  // Opções desenhadas numa linha: "( ) Vigente ( ) Não Vigente (o) Todos".
+  // Cada marcador começa uma opção e o texto vai até o próximo marcador.
+  function markerGroup(line, probe) {
+    if (!probe || typeof probe.markerKind !== "function") return null;
+
+    const words = line.runs
+      .flatMap((run) => run.words || [run])
+      .sort((a, b) => a.bbox.x0 - b.bbox.x0);
+
+    const options = [];
+    let current = null;
+    let kinds = [];
+
+    words.forEach((word, position) => {
+      const previous = words[position - 1];
+      const kind = probe.markerKind(word.bbox, 2.8, previous ? previous.bbox.x1 + 2 : 0);
+
+      if (kind) {
+        kinds.push(kind);
+        current = { texts: [word.text], box: { ...word.bbox } };
+        options.push(current);
+        return;
+      }
+
+      // O marcador selecionado às vezes é lido como texto ("(6)", "O", "©").
+      // Ele não é o nome da opção: é o começo da próxima.
+      if (!/[A-Za-zÀ-ÿ]{2,}/.test(word.text)) {
+        current = { texts: [], box: { ...word.bbox } };
+        options.push(current);
+        return;
+      }
+
+      if (!current) return;
+
+      // Palavra colada na opção anterior faz parte do texto dela.
+      if (word.bbox.x0 - current.box.x1 <= charWidth() * 2) {
+        current.texts.push(word.text);
+        current.box.x1 = word.bbox.x1;
+      }
+    });
+
+    // As opções de um grupo ficam lado a lado; o que estiver longe já é
+    // outra coisa da tela (um botão, outro campo).
+    const withText = options.filter((option) => option.texts.length);
+    const named = [];
+
+    withText.forEach((option) => {
+      const last = named[named.length - 1];
+      if (!last || option.box.x0 - last.box.x1 <= charWidth() * 6) named.push(option);
+    });
+
+    if (named.length < 2) return null;
+
+    const radios = kinds.filter((kind) => kind === "radio").length;
+
+    return {
+      kind: radios >= kinds.length / 2 ? "radio" : "check",
+      options: named.map((option) => ({
+        text: cleanTitle(option.texts.join(" ")),
+        box: option.box
+      })),
+      left: Math.min(...named.map((option) => option.box.x0)),
+      right: Math.max(...named.map((option) => option.box.x1))
+    };
+  }
+
   // Linha de caixas de marcação (checkbox/radio) — não é tira de abas.
   function isCheckboxLine(line, probe) {
-    if (!probe || line.runs.length < 1) return false;
-    const marked = line.runs.filter((run) => probe.hasBoxLeft(run.bbox)).length;
+    if (!probe || typeof probe.markerKind !== "function" || !line.runs.length) return false;
+
+    const marked = line.runs.filter((run, position) => {
+      const previous = line.runs[position - 1];
+      return probe.markerKind(run.bbox, 2.8, previous ? previous.bbox.x1 + 2 : 0);
+    }).length;
+
     return marked >= Math.max(1, Math.ceil(line.runs.length * 0.5));
   }
 
@@ -1268,20 +1387,78 @@
       if (repeats) ceiling = lines[1].bottom;
     }
 
+    // O cabeçalho da janela termina numa régua desenhada. Depender de "as duas
+    // primeiras linhas" falhava porque o OCR quebra o título em várias.
+    if (probe && typeof probe.rules === "function") {
+      const limit = Math.min(
+        table ? table.top : Infinity,
+        tabsTop !== null ? tabsTop : Infinity,
+        view.image.naturalHeight * 0.35
+      );
+
+      const above = probe
+        .rules()
+        .filter((rule) => rule.y < limit && rule.length >= view.image.naturalWidth * 0.5);
+
+      if (above.length) ceiling = Math.max(ceiling, above[above.length - 1].y);
+    }
+
     lines.forEach((line) => {
       if (table && line.top >= table.top - 2 && line.bottom <= table.bottom + 2) return;
-      if (line.bottom <= ceiling) return;
+
       if (table && line.top > table.bottom) return;
 
+
+      // Acima do cabeçalho da janela (ou da tira de abas) só sobrevive o que
+      // tem valor ao lado: um filtro global como o campo Empresa. Título,
+      // caminho e versão do ERP não têm.
+      const inHeader =
+        line.top < ceiling - 2 ||
+        (tabsTop !== null && line.bottom < tabsTop && toLine(line.top, 0) <= 2);
+
+      // Grupo de opções: um campo radio com a tabela de opções montada.
+      const group = !inHeader ? markerGroup(line, probe) : null;
+
+      if (group && group.kind === "radio") {
+        const description = group.options.map((option) => option.text).join(" / ");
+        const variable = helpers().variableFromDescription(
+          group.options[0].text || "opcao",
+          used
+        );
+
+        rows.push({
+          id: app.utils.createId(),
+          include: true,
+          origin: "ocr",
+          description: group.options[0].text
+            ? `Opção (${description})`
+            : "Opção",
+          variable,
+          type: "radio",
+          required: false,
+          isKey: false,
+          labelLine: toLine(line.top, line.bottom - line.top),
+          labelColumn: Math.max(1, toColumn(group.left) - 1),
+          labelSize: 8,
+          inputColumn: toColumn(group.left),
+          inputSize: Math.max(10, toSize(group.right - group.left)),
+          optionsVariable: `TAB${variable}`.slice(0, 20),
+          createOptionsTable: true,
+          optionsItems: group.options.map((option, position) => ({
+            value: String(position),
+            description: option.text || `Opção ${position + 1}`
+          })),
+          lookupPreset: "none",
+          box: { x0: group.left, y0: line.top, x1: group.right, y1: line.bottom }
+        });
+
+        return;
+      }
 
       const runs = line.runs;
       // Acima da tira de abas fica o cabeçalho da janela. Só sobrevive o que
       // tem valor ao lado, que é o caso de um filtro global (ex.: Empresa).
-      // Cabeçalho da janela: título na primeira linha e caminho na segunda.
-      // Um filtro global acima das abas (ex.: Empresa) vem depois disso.
-      const aboveTabs =
-        tabsTop !== null && line.bottom < tabsTop && toLine(line.top, 0) <= 2;
-      const checkboxLine = !aboveTabs && isCheckboxLine(line, probe);
+      const checkboxLine = !inHeader && isCheckboxLine(line, probe);
       let index = 0;
 
       while (index < runs.length) {
@@ -1332,7 +1509,13 @@
         const nextIsValue =
           next && (VALUE_PATTERN.test(next.text.trim()) || endsWithColon);
 
-        if (aboveTabs) {
+        // No cabeçalho da janela só passa label com valor colado ao lado (um
+        // filtro tipo "Empresa 22"). O título tem a versão do ERP na outra
+        // ponta da linha, e isso não é um campo.
+        const valueIsClose =
+          nextIsValue && next.bbox.x0 - run.bbox.x1 <= charWidth() * 3;
+
+        if (inHeader && !valueIsClose) {
           index += 1;
           continue;
         }
@@ -1366,9 +1549,18 @@
             ? Math.max(4, Math.min(60, toSize(freeSpace) - 1))
             : helpers().defaultSize(type, description);
 
+        const confidence = run.words && run.words.length
+          ? run.words.reduce((total, word) => total + (word.confidence || 0), 0) / run.words.length
+          : 100;
+
         rows.push({
           id: app.utils.createId(),
-          include: (nextIsValue || freeSpace > charWidth() * 3) && lineNumber > 1,
+          // Leitura duvidosa entra desmarcada: o usuário confere antes de usar.
+          include:
+            (nextIsValue || freeSpace > charWidth() * 3) &&
+            lineNumber > 1 &&
+            confidence >= 70,
+          confidence: Math.round(confidence),
           origin: "ocr",
           description,
           variable,
@@ -1427,7 +1619,13 @@
     // Coluna de marcação sem título: existe quando há um quadradinho desenhado
     // à esquerda do primeiro valor de cada linha.
     const firstData = table.dataLines?.[0]?.runs?.[0];
-    if (probe && firstData && probe.hasBoxLeft(firstData.bbox, 10) && columns[0]?.type !== "checkheader") {
+    if (
+      probe &&
+      firstData &&
+      typeof probe.markerKind === "function" &&
+      probe.markerKind(firstData.bbox, 10) &&
+      columns[0]?.type !== "checkheader"
+    ) {
       columns.unshift({
         id: app.utils.createId(),
         include: true,

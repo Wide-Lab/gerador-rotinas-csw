@@ -86,7 +86,7 @@
     [/csle|input|leitor|textbox|textfield|campo|edit\b/, "input"],
     [/checkbox|check/, "checkbox"],
     [/combo|select|dropdown/, "combo"],
-    [/radio/, "radio"],
+    [/radio|opcao|opção|option/, "radio"],
     [/textarea|memo/, "textarea"],
     [/date|data/, "date"],
     [/label|texto|text|title|titulo/, "label"]
@@ -118,7 +118,17 @@
       bottom: y + height,
       required: raw.required === true || raw.obrigatorio === true,
       key: raw.key === true || raw.chave === true || raw.isKey === true,
-      columns: first(raw.columns, raw.colunas, raw.headers, raw.cabecalho, raw.fields)
+      columns: first(
+        raw.gridData?.columns,
+        raw.columns,
+        raw.colunas,
+        raw.headers,
+        raw.cabecalho,
+        raw.fields
+      ),
+      rows: first(raw.gridData?.data, raw.data, raw.rows, raw.linhas),
+      options: first(raw.options, raw.opcoes, raw.items, raw.itens, raw.values),
+      hasLookup: String(first(raw.f7, raw.F7, "") || "").trim() !== ""
     };
   }
 
@@ -197,7 +207,19 @@
     return "a";
   }
 
-  function normalizeGridColumns(source, cellWidth, helpers) {
+  const DATE_SAMPLE = /^\d{2}[/\-.]\d{2}[/\-.]\d{2,4}$/;
+
+  // O desenho traz linhas de exemplo; elas dizem o tipo melhor que o título.
+  function typeFromSamples(samples) {
+    const clean = samples.map((value) => String(value ?? "").trim()).filter(Boolean);
+    if (!clean.length) return "";
+    if (clean.every((value) => DATE_SAMPLE.test(value))) return "d";
+    if (clean.every((value) => /^-?[\d.]+,\d+$/.test(value))) return "v3";
+    if (clean.every((value) => /^[\d.]+$/.test(value))) return "n";
+    return "a";
+  }
+
+  function normalizeGridColumns(source, cellWidth, helpers, rows = []) {
     const list = Array.isArray(source) ? source : [];
     const used = new Set();
     let piece = 0;
@@ -208,8 +230,20 @@
         isText ? item : first(item.title, item.text, item.label, item.name, item.header, "")
       ).trim() || `Coluna ${index + 1}`;
 
+      const key = isText ? "" : first(item.field, item.campo, item.key, item.dataField, "");
+      const samples = key
+        ? rows.map((row) => row && row[key]).filter((value) => value !== undefined && value !== "")
+        : [];
+
       const width = isText ? 0 : pixels(first(item.width, item.w, item.size, 0));
-      const type = gridColumnType(isText ? null : item, title);
+      const sampled = typeFromSamples(samples);
+      const declared = isText ? "" : flat(first(item.dataType, item.tipo, item.type, ""));
+
+      // "link" é a coluna de ação/marcação do desenhador.
+      const type =
+        declared === "link" && /check|sel|marca|a[çc][õo]es|editar/i.test(title)
+          ? "checkheader"
+          : sampled || gridColumnType(isText ? null : item, title);
 
       if (type !== "checkheader") piece += 1;
 
@@ -217,7 +251,14 @@
         title: type === "checkheader" ? "" : title,
         variable: helpers.variableFromDescription(title || `COLUNA${index + 1}`, used),
         type,
-        width: width > 0 ? Math.max(3, Math.round(width / cellWidth)) : Math.max(8, title.length + 2),
+        width:
+          width > 0
+            ? Math.max(3, Math.round(width / cellWidth))
+            : Math.max(
+                6,
+                title.length + 2,
+                ...samples.map((value) => String(value).length + 2)
+              ),
         workPiece: type === "checkheader" ? 0 : piece,
         recordKey: false,
         detail: type !== "checkheader",
@@ -240,6 +281,43 @@
 
     columns.forEach((column) => delete column._title);
     return columns;
+  }
+
+  // Empurra os elementos de cada linha para a direita até não colidirem.
+  function reflowFields(fields, columns) {
+    const byLine = new Map();
+
+    fields.forEach((field) => {
+      const list = byLine.get(field.inputLine) || [];
+      list.push(field);
+      byLine.set(field.inputLine, list);
+    });
+
+    byLine.forEach((list) => {
+      list.sort((a, b) => a.labelColumn - b.labelColumn);
+
+      let cursor = 1;
+      list.forEach((field) => {
+        field.labelColumn = Math.max(field.labelColumn, cursor);
+        field.inputColumn = Math.max(
+          field.inputColumn,
+          field.labelColumn + field.labelSize + 1
+        );
+
+        cursor = field.inputColumn + field.inputSize + 1;
+
+        if (field.hasDisplay) {
+          field.displayColumn = Math.max(field.displayColumn, cursor);
+          cursor = field.displayColumn + field.displaySize + 1;
+        }
+
+        // Sobrou pouco espaço até o fim da janela: encolhe o display.
+        if (field.hasDisplay && field.displayColumn + field.displaySize - 1 > columns) {
+          field.displaySize = Math.max(4, columns - field.displayColumn + 1);
+          cursor = field.displayColumn + field.displaySize + 1;
+        }
+      });
+    });
   }
 
   function helpersFor() {
@@ -314,8 +392,8 @@
       const sameLine = labels.filter(
         (label) =>
           Math.abs(label.y - input.y) <= cellHeight * 0.8 &&
-          label.x < input.x &&
           label.right <= input.right &&
+          label.right <= input.x + cellWidth * 2 &&
           label.text &&
           !PLACEHOLDER.test(label.text)
       );
@@ -358,23 +436,62 @@
       textarea: "textArea"
     };
 
-    const fields = inputs.map((input, position) => {
+    function optionItemsOf(component) {
+      const list = component.options;
+      if (!Array.isArray(list) || !list.length) return null;
+
+      return list.map((item, position) => ({
+        value: String(
+          typeof item === "object" ? first(item.value, item.valor, item.id, position) : position
+        ),
+        description: String(
+          typeof item === "object"
+            ? first(item.description, item.text, item.label, item.descricao, item.title, item)
+            : item
+        )
+      }));
+    }
+
+    // Um Display sozinho, com label à esquerda e sem leitor na linha, é o
+    // padrão de multi-seleção: o valor é escolhido por um botão ao lado.
+    const displayOnly = displays.filter((display) => {
+      const attached = inputs.some(
+        (input) =>
+          Math.abs(input.y - display.y) <= cellHeight * 0.8 &&
+          input.right <= display.x + cellWidth &&
+          display.x - input.right <= cellWidth * 6
+      );
+      if (attached) return false;
+
+      return labels.some(
+        (label) =>
+          Math.abs(label.y - display.y) <= cellHeight * 0.8 &&
+          label.right <= display.x + cellWidth * 2 &&
+          label.text &&
+          !PLACEHOLDER.test(label.text)
+      );
+    });
+
+    const fields = inputs.concat(displayOnly).map((input, position) => {
+      const isDisplayOnly = displayOnly.includes(input);
       const description = labelFor(input) || `Campo ${position + 1}`;
-      const display = displayFor(input);
+      const display = isDisplayOnly ? input : displayFor(input);
       const inferred = helpers.inferType(description);
-      const type = kindToType[input.kind] || inferred || "string";
+      const type = isDisplayOnly
+        ? "multiSelect"
+        : kindToType[input.kind] || inferred || "string";
       const line = toLine(input.y);
 
-      // A coluna do label é a do desenho; o tamanho é o que couber até o
-      // leitor. O texto do desenho é proporcional e não bate com a célula.
+      // No desenhador o texto do label termina na borda direita da caixa; é
+      // dali que se acha a coluna real, andando para trás o tamanho do texto.
       const inputColumn = toColumn(input.x);
       const source = labelSourceFor(input);
-      const wanted = Math.max(4, Math.ceil(description.length * 0.72) + 2);
-      const drawn = source ? toColumn(source.x) : Math.max(1, inputColumn - 1 - wanted);
-      const labelColumn = Math.max(1, Math.min(drawn, inputColumn - 2));
+      const wanted = Math.max(4, description.length + 1);
+      const rightEdge = source ? toColumn(source.right) : inputColumn - 1;
+      const labelColumn = Math.max(1, Math.min(rightEdge - wanted, inputColumn - 2));
       const labelSize = Math.max(2, Math.min(wanted, inputColumn - 1 - labelColumn));
 
-      return {
+      const field = {
         description,
         variable: helpers.variableFromDescription(description, used),
         type,
@@ -386,15 +503,37 @@
         labelSize,
         inputLine: line,
         inputColumn,
-        inputSize: Math.max(2, toSize(input.width) || helpers.defaultSize(type, description)),
+        inputSize: isDisplayOnly
+          ? 8
+          : Math.max(2, toSize(input.width) || helpers.defaultSize(type, description)),
         hasDisplay: Boolean(display) && !["date", "textArea"].includes(type),
         displayLine: line,
         displayColumn: display ? toColumn(display.x) : inputColumn + toSize(input.width) + 2,
         displaySize: display ? Math.max(10, toSize(display.width)) : 30,
-        lookupPreset: helpers.inferLookup(description) || "none",
+        // O desenho marca com f7 quando o campo tem consulta.
+        lookupPreset:
+          helpers.inferLookup(description) || (input.hasLookup ? "custom" : "none"),
         _applyLookupPreset: true
       };
+
+      if (type === "multiSelect") {
+        field.multiSelectTableVariable = `TAB${field.variable}`.slice(0, 20);
+        field.multiSelectSelectedText = "Selecionados";
+      }
+
+      const options = optionItemsOf(input);
+      if (options && ["radio", "combo", "checkbox"].includes(type)) {
+        field.optionsVariable = `TAB${app.utils
+          .normalizeVariable(description, "OPCAO")
+          .slice(0, 8)}`;
+        field.createOptionsTable = true;
+        field.optionsItems = options;
+      }
+
+      return field;
     });
+
+    reflowFields(fields, columns);
 
     const routineName = app.utils.normalizeVariable(
       first(options.routineName, screen.id, screen.name, "ROTINANOVA"),
@@ -421,7 +560,12 @@
     const documentGrids = grids.map((grid, index) => {
       const line = toLine(grid.y);
       const height = Math.max(3, Math.round(grid.height / cellHeight));
-      const gridColumns = normalizeGridColumns(grid.columns, cellWidth, helpers);
+      const gridColumns = normalizeGridColumns(
+        grid.columns,
+        cellWidth,
+        helpers,
+        Array.isArray(grid.rows) ? grid.rows : []
+      );
 
       if (!gridColumns.length) {
         warnings.push(
