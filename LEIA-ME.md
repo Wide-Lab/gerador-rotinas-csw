@@ -20,8 +20,9 @@ Abra o `gerador-json-ui-ajustada.html` normalmente (de preferência pelo Live Se
 | `feat/1-validador-cache` | validador de regras Caché/CSW rodando junto com o gerador + correção real do limite de 31 caracteres nas globais da rotina 299 | [LEIA-ME-VALIDADOR.md](LEIA-ME-VALIDADOR.md) |
 | `feat/2-f7-inteligente` | busca dentro do catálogo de F7, sugestão de consulta por campo e aplicação em lote | [LEIA-ME-F7-INTELIGENTE.md](LEIA-ME-F7-INTELIGENTE.md) |
 | `feat/3-documento-para-json` | cola a especificação (Word, Excel, PDF, markdown, CSV, lista à mão) e sai o projeto inteiro | [LEIA-ME-DOCUMENTO-PARA-JSON.md](LEIA-ME-DOCUMENTO-PARA-JSON.md) |
-| `feat/4-imagem-para-json` | print da tela vira campos posicionados, com OCR rodando dentro do navegador (inclui a branch 3) | [LEIA-ME-IMAGEM-PARA-JSON.md](LEIA-ME-IMAGEM-PARA-JSON.md) |
-| `feat/5-tudo-junto` | as quatro juntas | todos os arquivos acima |
+| `feat/4-imagem-para-json` | print da tela vira campos, grid, abas e botões, com OCR rodando dentro do navegador (inclui a branch 3) | [LEIA-ME-IMAGEM-PARA-JSON.md](LEIA-ME-IMAGEM-PARA-JSON.md) |
+| `feat/6-desenhador-para-cache` | JSON do desenhador React vira rotina Caché (inclui as branches 3 e 4) | [LEIA-ME-DESENHADOR-PARA-CACHE.md](LEIA-ME-DESENHADOR-PARA-CACHE.md) |
+| `feat/5-tudo-junto` | todas juntas | todos os arquivos acima |
 
 Nenhuma delas usa serviço pago, API ou IA remota. Tudo roda local no navegador.
 
