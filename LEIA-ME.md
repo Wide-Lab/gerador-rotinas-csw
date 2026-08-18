@@ -22,7 +22,11 @@ Abra o `gerador-json-ui-ajustada.html` normalmente (de preferência pelo Live Se
 | `feat/3-documento-para-json` | cola a especificação (Word, Excel, PDF, markdown, CSV, lista à mão) e sai o projeto inteiro | [LEIA-ME-DOCUMENTO-PARA-JSON.md](LEIA-ME-DOCUMENTO-PARA-JSON.md) |
 | `feat/4-imagem-para-json` | print da tela vira campos, grid, abas e botões, com OCR rodando dentro do navegador (inclui a branch 3) | [LEIA-ME-IMAGEM-PARA-JSON.md](LEIA-ME-IMAGEM-PARA-JSON.md) |
 | `feat/6-desenhador-para-cache` | JSON do desenhador React vira rotina Caché (inclui as branches 3 e 4) | [LEIA-ME-DESENHADOR-PARA-CACHE.md](LEIA-ME-DESENHADOR-PARA-CACHE.md) |
-| `feat/5-tudo-junto` | todas juntas | todos os arquivos acima |
+| `feat/5-tudo-junto` | todas juntas — **é a recomendada para usar** | todos os arquivos acima |
+
+> As branches 4 e 6 acabaram recebendo as demais junto (o importador por imagem e o do
+> desenhador compartilham a inferência de tipo, variável e F7). As branches 1, 2 e 3
+> continuam isoladas se você quiser avaliar uma ideia por vez.
 
 Nenhuma delas usa serviço pago, API ou IA remota. Tudo roda local no navegador.
 
