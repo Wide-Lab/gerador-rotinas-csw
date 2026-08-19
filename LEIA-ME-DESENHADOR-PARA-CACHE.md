@@ -266,3 +266,30 @@ No `WDWDNEW015`:
 | Tabela de Preço (a) | 24 | 24 |
 
 O importador por imagem usa a mesma régua, com as amostras lidas pelo OCR.
+
+---
+
+## Sétima rodada — manutenção em linha reconhecida no desenho
+
+Uma tela com **Incluir + Manutenção + Remover** é uma manutenção em linha do grid: o
+componente `btnManut` já desenha esses três botões sozinho. O conversor tratava cada um
+como botão personalizado, e a tela saía com a barra duplicada — uma linha com
+`Incluir | Manutenção | …` e outra logo abaixo com `Manutenção | Incluir | Remover`.
+
+Agora, quando o desenho tem dois ou mais desses botões e existe grid:
+
+- a opção **Gerar manutenção em linha no Grid** já vem marcada, com os labels
+  `3100 / 3200 / 3300 / 4000 / 4999`;
+- esses botões saem da lista de personalizados — quem os desenha é o `btnManut`;
+- o `btnManut` fica **na linha e na coluna do desenho**, não quatro linhas abaixo do grid;
+- os botões que sobram (Cancelar, Excluir, Importar, Histórico) continuam na mesma linha,
+  ao lado da barra.
+
+No `WDWDNEW015`:
+
+```
+csw:btnManut:2,22,3300^WDWDNEW015,3100^WDWDNEW015,3200^WDWDNEW015,1
+botões restantes: Cancelar (col 40) · Excluir (54) · Importar (67) · Histórico (81)
+```
+
+O desenho sem esses botões (`WDWDNEW010`) continua sem manutenção em linha, como antes.

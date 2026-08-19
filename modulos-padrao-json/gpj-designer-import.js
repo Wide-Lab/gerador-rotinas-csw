@@ -372,6 +372,9 @@
 
   const CONSULT_PATTERN = /^(consultar?|pesquisar?|limpar|filtrar)$/i;
 
+  // Botões que o próprio btnManut desenha.
+  const MAINTENANCE_PATTERN = /^(incluir|inserir|novo|manuten[çc][ãa]o|remover)$/i;
+
   // Tamanho usual do código em cada consulta padrão.
   const LOOKUP_SIZES = {
     empresa: 6,
@@ -646,6 +649,13 @@
     const maintenance = grids.length
       ? null
       : buttons.find((button) => /manuten/i.test(button.text));
+
+    // Incluir + Manutenção + Remover no desenho: é a manutenção em linha do
+    // grid. O btnManut cobre os três, então eles saem da lista de botões.
+    const inlineButtons = grids.length
+      ? buttons.filter((button) => MAINTENANCE_PATTERN.test(button.text.trim()))
+      : [];
+    const hasInlineMaintenance = inlineButtons.length >= 2;
     const consult = buttons.filter((button) => CONSULT_PATTERN.test(button.text.trim()));
     const extraButtons = buttons.filter(
       (button) => button !== maintenance && !consult.includes(button)
@@ -690,6 +700,20 @@
         gridLineStart: line,
         gridLineEnd: line + height - 1,
         gridNavigation: 1,
+        // A barra de manutenção fica na mesma linha e coluna dos botões do
+        // desenho, não quatro linhas abaixo do grid.
+        gridMaintenance: hasInlineMaintenance,
+        gridInlineMaintenance: hasInlineMaintenance,
+        gridAutoButtonPosition: !hasInlineMaintenance,
+        gridMaintenanceButtonColumn: hasInlineMaintenance
+          ? toColumn(Math.min(...inlineButtons.map((button) => button.x)))
+          : undefined,
+        gridMaintenanceButtonLine: hasInlineMaintenance
+          ? toLine(Math.min(...inlineButtons.map((button) => button.y)))
+          : undefined,
+        gridAllowInsert: true,
+        gridAllowRemove: true,
+        gridRowEnter: true,
         // Sem botão de consulta no desenho, não gera o btnConsultar.
         gridUseConsultButton: consult.length > 0,
         gridConsultButtonColumn: consult.length ? toColumn(consult[0].x) : 86,
@@ -714,7 +738,7 @@
     // Manutenção entra na fila junto com os outros para a barra não ficar
     // com um buraco no lugar dela.
     const bar = buttons
-      .filter((button) => !consult.includes(button))
+      .filter((button) => !consult.includes(button) && !inlineButtons.includes(button))
       .map((button, index) => ({
         index,
         text: button.text || `Botão ${index + 1}`,
