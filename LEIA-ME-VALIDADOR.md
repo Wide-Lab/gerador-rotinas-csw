@@ -140,3 +140,28 @@ trazer o label com o esqueleto da ação:
 	; TODO: implementar a ação do botão Incluir.
 	quit
 ```
+
+## Correção — `<UNDEFINED> *codEmpresa` no Consultar
+
+Com a manutenção em linha ligada, o `GerarGlobalTrabalho` da RG passa a **ler a global
+persistente** para montar a global de trabalho:
+
+```objectscript
+for  set artigo=$order(^WDWDNEW015(codEmpresa,artigo)) ...
+```
+
+Só que a assinatura não recebia `codEmpresa` — ela tinha apenas `(term,rotina,<filtros>)`.
+No primeiro *Consultar* o Caché estourava
+`<UNDEFINED>GerarGlobalTrabalho+11^WDWDNEW015RG *codEmpresa`.
+
+O `GerarGrid` já seguia o padrão certo (`GerarGrid(codEmpresa,term,rotina)` chamado com
+`(CE,CT,%PRG)`); agora o `GerarGlobalTrabalho` segue o mesmo:
+
+```objectscript
+GerarGlobalTrabalho(codEmpresa,term,rotina,empresa)	;
+...
+2000AG1	set sc=$$GerarGlobalTrabalho^WDWDNEW015RG(CE,CT,%PRG,CODEMP)
+```
+
+Os índices só entram quando o corpo realmente lê a global persistente, para não mudar a
+assinatura de quem não precisa.

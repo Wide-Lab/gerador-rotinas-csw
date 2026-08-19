@@ -559,6 +559,24 @@
     return "a";
   }
 
+  // Número e data ficam do tamanho do dado; texto acompanha o conteúdo.
+  function gridColumnWidth(type, title, samples, drawn) {
+    const longest = samples.reduce(
+      (maior, value) => Math.max(maior, String(value ?? "").length),
+      0
+    );
+
+    if (["n", "v2", "v3", "d"].includes(type)) {
+      return Math.max(6, Math.min(14, (longest || 8) + 2));
+    }
+
+    if (type === "checkheader") return Math.max(4, Math.min(10, drawn));
+
+    if (longest) return Math.max(10, Math.min(40, longest + 2));
+
+    return Math.max(6, drawn);
+  }
+
   function cleanTitle(text) {
     let result = String(text || "")
       .replace(/[:：]\s*$/, "")
@@ -700,11 +718,14 @@
         .filter(Boolean)
         .map((run) => run.text);
 
+      const columnTitle = cleanTitle(titleWords.map((word) => word.text).join(" "));
+      const columnType = columnTypeFromValues(values);
+
       return {
-        title: cleanTitle(titleWords.map((word) => word.text).join(" ")),
+        title: columnTitle,
         start: cluster.start,
-        width: Math.max(3, toSize(limit - cluster.start)),
-        type: columnTypeFromValues(values),
+        width: gridColumnWidth(columnType, columnTitle, values, toSize(limit - cluster.start)),
+        type: columnType,
         samples: values.slice(0, 3)
       };
     });

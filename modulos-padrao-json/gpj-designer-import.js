@@ -219,6 +219,27 @@
     return "a";
   }
 
+  // Número e data ficam do tamanho do dado; texto acompanha o conteúdo, que
+  // costuma ser maior que o título.
+  function columnWidth(type, title, samples, drawn, cellWidth) {
+    const longest = samples.reduce(
+      (maior, value) => Math.max(maior, String(value ?? "").length),
+      0
+    );
+
+    if (["n", "v2", "v3", "d"].includes(type)) {
+      return Math.max(6, Math.min(14, (longest || 8) + 2));
+    }
+
+    if (type === "checkheader") return Math.max(4, Math.min(10, title.length + 2));
+
+    if (longest) return Math.max(10, Math.min(40, longest + 2));
+
+    if (drawn > 0) return Math.max(6, Math.round(drawn / cellWidth));
+
+    return Math.max(10, title.length + 2);
+  }
+
   function normalizeGridColumns(source, cellWidth, helpers, rows = []) {
     const list = Array.isArray(source) ? source : [];
     const used = new Set();
@@ -251,14 +272,7 @@
         title: type === "checkheader" ? "" : title,
         variable: helpers.variableFromDescription(title || `COLUNA${index + 1}`, used),
         type,
-        width:
-          width > 0
-            ? Math.max(3, Math.round(width / cellWidth))
-            : Math.max(
-                6,
-                title.length + 2,
-                ...samples.map((value) => String(value).length + 2)
-              ),
+        width: columnWidth(type, title, samples, width, cellWidth),
         workPiece: type === "checkheader" ? 0 : piece,
         recordKey: false,
         detail: type !== "checkheader",

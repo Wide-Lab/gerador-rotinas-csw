@@ -2546,7 +2546,16 @@
     lines.push(`\tdo AG^%CSUTIUD(,"2000AG1^${config.routineName}")`);
     lines.push("\tquit:$$CSP^%CSW1UTI()");
     lines.push("\t;");
-    lines.push(`2000AG1\tset sc=$$GerarGlobalTrabalho^${config.rgRoutineName}(${cleanupPrefix}%PRG${filterArgs})`);
+    // Os argumentos do índice acompanham a assinatura da RG.
+    const persistentArgs =
+      config.gridMaintenance && recordKeyDefinition()
+        ? app.indexes.macArguments(config)
+        : [];
+    const persistentPrefix = persistentArgs.length ? `${persistentArgs.join(",")},` : "";
+
+    lines.push(
+      `2000AG1\tset sc=$$GerarGlobalTrabalho^${config.rgRoutineName}(${persistentPrefix}${cleanupPrefix}%PRG${filterArgs})`
+    );
     lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 2000AGEX");
     lines.push("\t;");
 
@@ -2962,8 +2971,19 @@
     lines.push("\t;");
     lines.push("\tquit $$$OK");
     lines.push("\t;");
+    // Quando o corpo lê a global persistente, os índices dela (codEmpresa e
+    // as chaves) precisam entrar na assinatura.
+    const persistentParameters =
+      config.gridMaintenance && key ? app.indexes.rgParameters(config) : [];
+
     lines.push("\t; Gerar Global de Trabalho");
-    lines.push(`GerarGlobalTrabalho(${joinCallArguments([...cleanupParameters, "rotina"])}${filterArgs})\t;`);
+    lines.push(
+      `GerarGlobalTrabalho(${joinCallArguments([
+        ...persistentParameters,
+        ...cleanupParameters,
+        "rotina"
+      ])}${filterArgs})\t;`
+    );
     lines.push("\t$$$VAR");
     lines.push(`\tnew sc,${key ? key.parameter : workRecordName},${mtempVariable}`);
     lines.push("\t;");

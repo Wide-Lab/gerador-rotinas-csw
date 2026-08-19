@@ -240,3 +240,29 @@ um código de empresa tem 6 dígitos. Quando o campo cai num preset conhecido, o
 de uma tabela — empresa 6, cliente 10, produto 15, moeda 5, transportadora 8,
 representante 6, tipo de nota 4, condição de venda 6, tabela de preço 6. O campo `Empresa`
 saiu de 11 para 6 colunas. O importador por imagem usa a mesma tabela.
+
+---
+
+## Sexta rodada — largura da coluna pelo dado
+
+O título mandava na largura: `Peso Liquido Padrão (Multiplo)` tem 30 caracteres e valores
+de dois dígitos, e a coluna saía com 32, empurrando a tabela inteira.
+
+Agora quem manda é o conteúdo, com a régua separada por tipo:
+
+- **número, decimal e data** ficam do tamanho do dado (mínimo 6, máximo 14);
+- **texto** acompanha o maior valor de exemplo (mínimo 10, máximo 40);
+- **coluna de marcação** fica estreita.
+
+No `WDWDNEW015`:
+
+| coluna | antes | agora |
+|---|---|---|
+| Artigo (n) | 10 | 10 |
+| Descrição (a) | 16 | 16 |
+| Peso Liquido Padrão (Multiplo) (n) | 32 | **6** |
+| Quantidade Minima Carga (n) | 25 | **6** |
+| Catalogo (a) | 28 | 28 |
+| Tabela de Preço (a) | 24 | 24 |
+
+O importador por imagem usa a mesma régua, com as amostras lidas pelo OCR.
