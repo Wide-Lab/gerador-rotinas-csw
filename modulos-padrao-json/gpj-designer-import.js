@@ -299,22 +299,22 @@
 
       list.sort((a, b) => a.column - b.column);
 
-      const gap = 1;
+      const gap = 2;
       const start = Math.max(2, Math.min(...list.map((entry) => entry.column)));
-      const available = columns - start - gap * (list.length - 1);
-      const size = Math.max(
-        8,
-        Math.min(
-          Math.max(...list.map((entry) => entry.size)),
-          Math.floor(available / list.length)
-        )
-      );
+
+      // Cada botão do tamanho do próprio texto; a largura do desenho é só um
+      // retângulo e deixava a barra ocupando a tela inteira.
+      const sizeOf = (entry) => Math.max(10, String(entry.text || "").length + 4);
+      const total =
+        list.reduce((sum, entry) => sum + sizeOf(entry), 0) + gap * (list.length - 1);
+      const excess = start + total - columns;
 
       let cursor = start;
       list.forEach((entry) => {
+        const shrink = excess > 0 ? Math.ceil(excess / list.length) : 0;
+        entry.size = Math.max(8, sizeOf(entry) - shrink);
         entry.column = cursor;
-        entry.size = size;
-        cursor += size + gap;
+        cursor += entry.size + gap;
       });
     });
   }
@@ -357,6 +357,19 @@
   }
 
   const CONSULT_PATTERN = /^(consultar?|pesquisar?|limpar|filtrar)$/i;
+
+  // Tamanho usual do código em cada consulta padrão.
+  const LOOKUP_SIZES = {
+    empresa: 6,
+    cliente: 10,
+    produto: 15,
+    moeda: 5,
+    transportadora: 8,
+    representante: 6,
+    tipoNota: 4,
+    condicaoVenda: 6,
+    tabelaPreco: 6
+  };
 
   function helpersFor() {
     return (
@@ -544,7 +557,8 @@
         inputColumn,
         inputSize: isDisplayOnly
           ? 8
-          : Math.max(6, toSize(input.width) || helpers.defaultSize(type, description)),
+          : LOOKUP_SIZES[helpers.inferLookup(description)] ||
+            Math.max(6, toSize(input.width) || helpers.defaultSize(type, description)),
         hasDisplay: Boolean(display) && !["date", "textArea"].includes(type),
         displayLine: line,
         displayColumn: display ? toColumn(display.x) : inputColumn + toSize(input.width) + 2,
@@ -596,7 +610,11 @@
 
     const gridLocation = documentTabs.length ? documentTabs[0].id : "parent";
 
-    const maintenance = buttons.find((button) => /manuten/i.test(button.text));
+    // Só faz sentido como btnManter numa rotina de cadastro; em consulta com
+    // grid o "Manutenção" é um botão comum.
+    const maintenance = grids.length
+      ? null
+      : buttons.find((button) => /manuten/i.test(button.text));
     const consult = buttons.filter((button) => CONSULT_PATTERN.test(button.text.trim()));
     const extraButtons = buttons.filter(
       (button) => button !== maintenance && !consult.includes(button)

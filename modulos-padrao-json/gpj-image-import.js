@@ -38,6 +38,19 @@
     mode: "campo"
   };
 
+  // Tamanho usual do código em cada consulta padrão.
+  const LOOKUP_SIZES = {
+    empresa: 6,
+    cliente: 10,
+    produto: 15,
+    moeda: 5,
+    transportadora: 8,
+    representante: 6,
+    tipoNota: 4,
+    condicaoVenda: 6,
+    tabelaPreco: 6
+  };
+
   const helpers = () =>
     (app.specImport && app.specImport.helpers) || {
       variableFromDescription: (description, used) => {
@@ -1599,8 +1612,9 @@
         const sampled = nextIsValue ? typeFromSample(next.text.trim()) : "";
         const type = helpers().inferType(description) || sampled || "string";
 
+        const lookup = helpers().inferLookup(description) || "none";
         const inputColumn = nextIsValue ? toColumn(next.bbox.x0) : toColumn(labelEnd) + 1;
-        const inputSize = nextIsValue
+        const inputSize = LOOKUP_SIZES[lookup] ? LOOKUP_SIZES[lookup] : nextIsValue
           ? Math.max(4, Math.min(60, toSize(freeSpace) + 2))
           : next
             ? Math.max(4, Math.min(60, toSize(freeSpace) - 1))
@@ -1634,7 +1648,7 @@
           displaySize: displayRun
             ? Math.max(10, toSize(displayRun.bbox.x1 - displayRun.bbox.x0))
             : 30,
-          lookupPreset: helpers().inferLookup(description) || "none",
+          lookupPreset: lookup,
           box: { ...run.bbox }
         });
 
@@ -2673,22 +2687,22 @@
 
       list.sort((a, b) => a.column - b.column);
 
-      const gap = 1;
+      const gap = 2;
       const start = Math.max(2, Math.min(...list.map((entry) => entry.column)));
-      const available = columns - start - gap * (list.length - 1);
-      const size = Math.max(
-        8,
-        Math.min(
-          Math.max(...list.map((entry) => entry.size)),
-          Math.floor(available / list.length)
-        )
-      );
+
+      // Cada botão do tamanho do próprio texto; a largura do desenho é só um
+      // retângulo e deixava a barra ocupando a tela inteira.
+      const sizeOf = (entry) => Math.max(10, String(entry.text || "").length + 4);
+      const total =
+        list.reduce((sum, entry) => sum + sizeOf(entry), 0) + gap * (list.length - 1);
+      const excess = start + total - columns;
 
       let cursor = start;
       list.forEach((entry) => {
+        const shrink = excess > 0 ? Math.ceil(excess / list.length) : 0;
+        entry.size = Math.max(8, sizeOf(entry) - shrink);
         entry.column = cursor;
-        entry.size = size;
-        cursor += size + gap;
+        cursor += entry.size + gap;
       });
     });
   }
@@ -2705,7 +2719,11 @@
     const buttons = view.buttons.filter((button) => button.include);
     const hasGrid = Boolean(view.grid && view.grid.include);
 
-    const manutencao = buttons.find((button) => /manuten/i.test(button.text));
+    // Em consulta com grid o "Manutenção" é botão comum; o btnManter é a
+    // barra Salvar/Excluir/Cancelar do cadastro.
+    const manutencao = hasGrid
+      ? null
+      : buttons.find((button) => /manuten/i.test(button.text));
     // O botão de consulta é gerado pela própria tela; não vira personalizado.
     const consulta = buttons.filter((button) =>
       /^(consultar?|pesquisar?|limpar|filtrar)$/i.test(button.text.trim())

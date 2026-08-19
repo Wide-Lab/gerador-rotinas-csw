@@ -215,3 +215,28 @@ ficam duas colunas de respiro, como nas telas do ERP. O leitor também passou a 
 mínimo de 6 colunas, para um campo estreito no desenho não virar uma caixa inutilizável.
 
 O importador por imagem ganhou o mesmo alinhamento de barra.
+
+---
+
+## Quinta rodada — botão do tamanho do texto e campo pelo F7
+
+**Botão pequeno.** Uniformizar todos pela maior largura do desenho fazia a barra ocupar a
+tela inteira. Agora cada botão tem a largura do **próprio texto** (`texto + 4`, mínimo 10)
+e dois espaços entre eles; se a soma não couber na janela, todos encolhem junto.
+
+```
+antes:  Incluir(16) col 2 · [buraco] · Cancelar(16) col 36 · Excluir(16) col 53 ...
+depois: Incluir(11) col 2 · Manutenção(14) col 15 · Cancelar(12) col 31
+        · Excluir(11) col 45 · Importar(12) col 58 · Histórico(13) col 72
+```
+
+**O buraco no meio da barra.** O `Manutenção` virava o btnManter, que é a barra
+Salvar/Excluir/Cancelar de uma rotina de **cadastro** — numa consulta com grid ele não
+aparece, e o lugar dele ficava vazio. Agora, quando a rotina tem grid, o `Manutenção` é um
+botão comum como os outros; o btnManter continua sendo usado nas rotinas de cadastro.
+
+**Tamanho do campo pelo F7.** O desenho dá um retângulo (114px), mas quem manda é o dado:
+um código de empresa tem 6 dígitos. Quando o campo cai num preset conhecido, o tamanho vem
+de uma tabela — empresa 6, cliente 10, produto 15, moeda 5, transportadora 8,
+representante 6, tipo de nota 4, condição de venda 6, tabela de preço 6. O campo `Empresa`
+saiu de 11 para 6 colunas. O importador por imagem usa a mesma tabela.
