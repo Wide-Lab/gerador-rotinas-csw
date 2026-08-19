@@ -1025,6 +1025,30 @@
   }
 
   function appendActions(lines, config, locationId, routineName) {
+    // Botão que chama um label da própria rotina: o label precisa existir,
+    // senão o clique estoura em zexecuteLabel^Utils.CSW1JavaFunctions.
+    const written = new Set();
+
+    buttonsForLocation(locationId)
+      .filter(
+        (button) =>
+          button.actionType !== "screen" && !cleanRoutine(button.actionRoutine, "")
+      )
+      .forEach((button) => {
+        const label = cleanLabel(button.actionLabel, "6000");
+        if (written.has(label)) return;
+        written.add(label);
+
+        const title =
+          u.sanitize(button.text.replace(/<\/?u>/gi, "")) || "Ação do botão";
+
+        lines.push(`\t; ${title}`);
+        lines.push(`${label}\t;`);
+        lines.push(`\t; TODO: implementar a ação do botão ${title}.`);
+        lines.push("\tquit");
+        lines.push("\t;");
+      });
+
     const buttons = buttonsForLocation(locationId).filter(
       (button) => button.actionType === "screen"
     );

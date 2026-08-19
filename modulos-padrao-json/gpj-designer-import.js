@@ -371,6 +371,20 @@
     tabelaPreco: 6
   };
 
+  // Nome padrão da variável em cada consulta. Sem isso o campo "Empresa" vira
+  // EMP, que é a variável de retorno do próprio Valcp, e o valor se perde.
+  const LOOKUP_VARIABLES = {
+    empresa: "CODEMP",
+    cliente: "CODCLI",
+    produto: "CODITM",
+    moeda: "CODMOE",
+    transportadora: "CODTRA",
+    representante: "CODREP",
+    tipoNota: "CODTIPNOT",
+    condicaoVenda: "CODCONVEN",
+    tabelaPreco: "CODTABPRE"
+  };
+
   function helpersFor() {
     return (
       (app.specImport && app.specImport.helpers) || {
@@ -543,9 +557,13 @@
       const labelColumn = Math.max(1, Math.min(rightEdge - wanted, inputColumn - 3));
       const labelSize = Math.max(2, Math.min(wanted, inputColumn - 2 - labelColumn));
 
+      const lookup = helpers.inferLookup(description) || (input.hasLookup ? "custom" : "none");
+
       const field = {
         description,
-        variable: helpers.variableFromDescription(description, used),
+        variable: LOOKUP_VARIABLES[lookup]
+          ? (used.add(LOOKUP_VARIABLES[lookup]), LOOKUP_VARIABLES[lookup])
+          : helpers.variableFromDescription(description, used),
         type,
         tabId: "parent",
         isKey: input.key === true,
@@ -557,15 +575,14 @@
         inputColumn,
         inputSize: isDisplayOnly
           ? 8
-          : LOOKUP_SIZES[helpers.inferLookup(description)] ||
+          : LOOKUP_SIZES[lookup] ||
             Math.max(6, toSize(input.width) || helpers.defaultSize(type, description)),
         hasDisplay: Boolean(display) && !["date", "textArea"].includes(type),
         displayLine: line,
         displayColumn: display ? toColumn(display.x) : inputColumn + toSize(input.width) + 2,
         displaySize: display ? Math.max(10, toSize(display.width)) : 30,
         // O desenho marca com f7 quando o campo tem consulta.
-        lookupPreset:
-          helpers.inferLookup(description) || (input.hasLookup ? "custom" : "none"),
+        lookupPreset: lookup,
         _applyLookupPreset: true
       };
 
@@ -751,7 +768,10 @@
         size: entry.size,
         buttonId: `bt${app.utils
           .normalizeVariable(entry.text, `BOTAO${entry.index + 1}`)
-          .slice(0, 18)}`
+          .slice(0, 18)}`,
+        // Um label por botão; sem isso todos caem no mesmo 6000.
+        actionLabel: String(6000 + entry.index * 100),
+        returnLabel: String(6000 + entry.index * 100) + "EX"
       })),
       indexes: fields
         .filter((field) => field.isKey)

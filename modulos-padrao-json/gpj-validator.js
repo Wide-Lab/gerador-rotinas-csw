@@ -380,6 +380,8 @@
    * Regras — chaves, RG e persistência
    * ------------------------------------------------------------------ */
 
+  const variableOf = (field) => app.utils.normalizeVariable(field.variable, "");
+
   function checkKeysAndRules(add, config, state) {
     const fieldById = new Map(state.fields.map((field) => [field.id, field]));
     const keyIndexes = state.globalIndexes.filter((index) => index.type === "key");
@@ -571,6 +573,22 @@
           { where, target }
         );
       });
+
+      // O Valcp recebe o código e devolve o registro. Se as duas variáveis
+      // forem a mesma, o código se perde na primeira validação e a tela passa a
+      // dizer que o registro não existe.
+      const extras = app.utils.parseVariables(field.extraVariables);
+      if (extras.includes(variableOf(field))) {
+        add.error(
+          "variavel-colide-com-valcp",
+          `${where}: a variável "${variableOf(field)}" também é usada como retorno no Valcp.`,
+          {
+            hint: "O Valcp faz $Ver...(campo,.retorno); com o mesmo nome nos dois, o valor digitado é sobrescrito.",
+            where,
+            target
+          }
+        );
+      }
 
       if (field.typedReaderEnabled === true && !String(field.typedReaderRoutine || "").trim()) {
         add.error(

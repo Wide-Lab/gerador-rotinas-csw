@@ -38,6 +38,20 @@
     mode: "campo"
   };
 
+  // Nome padrão da variável em cada consulta: o campo "Empresa" não pode
+  // virar EMP, que é a variável de retorno do próprio Valcp.
+  const LOOKUP_VARIABLES = {
+    empresa: "CODEMP",
+    cliente: "CODCLI",
+    produto: "CODITM",
+    moeda: "CODMOE",
+    transportadora: "CODTRA",
+    representante: "CODREP",
+    tipoNota: "CODTIPNOT",
+    condicaoVenda: "CODCONVEN",
+    tabelaPreco: "CODTABPRE"
+  };
+
   // Tamanho usual do código em cada consulta padrão.
   const LOOKUP_SIZES = {
     empresa: 6,
@@ -1608,11 +1622,14 @@
         // um "["). O nome do campo é só a parte de texto.
         const glued = text.match(/^(.*[A-Za-zÀ-ÿ])[^A-Za-z0-9]*\d+$/);
         const description = glued ? cleanTitle(glued[1]) : text;
-        const variable = helpers().variableFromDescription(description, used);
+        const preset = helpers().inferLookup(description) || "none";
+        const variable = LOOKUP_VARIABLES[preset]
+          ? (used.add(LOOKUP_VARIABLES[preset]), LOOKUP_VARIABLES[preset])
+          : helpers().variableFromDescription(description, used);
         const sampled = nextIsValue ? typeFromSample(next.text.trim()) : "";
         const type = helpers().inferType(description) || sampled || "string";
 
-        const lookup = helpers().inferLookup(description) || "none";
+        const lookup = preset;
         const inputColumn = nextIsValue ? toColumn(next.bbox.x0) : toColumn(labelEnd) + 1;
         const inputSize = LOOKUP_SIZES[lookup] ? LOOKUP_SIZES[lookup] : nextIsValue
           ? Math.max(4, Math.min(60, toSize(freeSpace) + 2))
@@ -2809,7 +2826,10 @@
         size: entry.size,
         buttonId: `bt${app.utils
           .normalizeVariable(entry.text, `BOTAO${entry.index + 1}`)
-          .slice(0, 18)}`
+          .slice(0, 18)}`,
+        // Um label por botão; sem isso todos caem no mesmo 6000.
+        actionLabel: String(6000 + entry.index * 100),
+        returnLabel: String(6000 + entry.index * 100) + "EX"
       })),
       fields: rows.map((row) => ({
         // Tabela de opções montada na leitura (radio, combo, checkbox).

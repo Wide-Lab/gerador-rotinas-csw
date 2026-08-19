@@ -102,3 +102,41 @@ ObterTabOpcao(tabOpcao)	;
 	;
 	quit $$$OK
 ```
+
+## Correção — a variável do campo comendo o retorno do Valcp
+
+O campo `Empresa` virava a variável `EMP`, que é exatamente a variável de retorno do
+Valcp da empresa:
+
+```objectscript
+set sc=$$VerEmpresa^CCAPLRG001(EMP,.EMP)
+```
+
+O código entrava e o registro da empresa saía **na mesma variável**. Na validação seguinte
+o campo já não tinha mais o código e a tela respondia *"Empresa não cadastrada!"* mesmo com
+a empresa selecionada pelo F7.
+
+Duas coisas mudaram:
+
+- os importadores passaram a usar o nome padrão da variável quando o campo cai num preset
+  conhecido — `CODEMP`, `CODCLI`, `CODITM`, `CODMOE`, `CODTRA`, `CODREP`, `CODTIPNOT`,
+  `CODCONVEN`, `CODTABPRE`. O gerado virou `$$VerEmpresa^CCAPLRG001(CODEMP,.EMP)`;
+- o validador ganhou a regra `variavel-colide-com-valcp`, que aponta o erro em qualquer
+  projeto (inclusive nos montados à mão):
+  *Campo "Código da Empresa": a variável "EMP" também é usada como retorno no Valcp.*
+
+## Correção — label do botão personalizado
+
+Os botões importados apontavam todos para `6000^ROTINA` e **esse label não era gerado** —
+ele só saía para botões do tipo "abrir outra tela". Clicar em qualquer um estourava em
+`zexecuteLabel^Utils.CSW1JavaFunctions`.
+
+Agora cada botão recebe um label próprio (`6000`, `6100`, `6200`…) e a rotina passa a
+trazer o label com o esqueleto da ação:
+
+```objectscript
+	; Incluir
+6000	;
+	; TODO: implementar a ação do botão Incluir.
+	quit
+```
