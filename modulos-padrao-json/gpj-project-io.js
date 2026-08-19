@@ -801,6 +801,9 @@
 
     app.tabs.render();
     app.fields.render();
+    // Depois dos grids carregados, para a coluna marcada como chave entrar
+    // nos índices da global.
+    app.indexes.syncWithKeys();
     app.indexes.render();
     app.customButtons.render();
 

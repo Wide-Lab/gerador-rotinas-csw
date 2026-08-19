@@ -1580,12 +1580,14 @@
 
         // Caixa de marcação: o texto é o próprio campo, sem leitor ao lado.
         if (checkboxLine) {
+          const checkVariable = helpers().variableFromDescription(text, used);
+
           rows.push({
             id: app.utils.createId(),
             include: true,
             origin: "ocr",
             description: text,
-            variable: helpers().variableFromDescription(text, used),
+            variable: checkVariable,
             type: "checkbox",
             required: false,
             isKey: false,
@@ -1594,6 +1596,10 @@
             labelSize: Math.max(2, toSize(run.bbox.x1 - run.bbox.x0)),
             inputColumn: toColumn(run.bbox.x1) + 1,
             inputSize: 10,
+            // Sem a tabela de opções o checkbox não compila.
+            optionsVariable: `TAB${checkVariable}`.slice(0, 20),
+            createOptionsTable: true,
+            optionsItems: [{ value: "1", description: text }],
             lookupPreset: "none",
             box: { ...run.bbox }
           });
@@ -2767,13 +2773,25 @@
       /^(consultar?|pesquisar?|limpar|filtrar)$/i.test(button.text.trim())
     );
 
+    // Incluir + Manutenção + Remover na tela: é a manutenção em linha do grid.
+    // O btnManut cobre os três, então eles saem da lista de botões.
+    const inlineButtons = hasGrid
+      ? buttons.filter((button) =>
+          /^(incluir|inserir|novo|manuten[çc][ãa]o|remover|excluir)$/i.test(button.text.trim())
+        )
+      : [];
+    const hasInlineMaintenance = inlineButtons.length >= 2;
+
     // Com tira de abas, o grid mora dentro da primeira aba — é assim que a
     // tela do ERP se organiza. Sem abas, o grid fica na rotina principal.
     const gridLocation = tabs.length ? "aba1" : "parent";
     const grid = gridDefinition(routineName, gridLocation, consulta);
 
     const extraButtons = buttons.filter(
-      (button) => button !== manutencao && !consulta.includes(button)
+      (button) =>
+        button !== manutencao &&
+        !consulta.includes(button) &&
+        !inlineButtons.includes(button)
     );
 
     // O grid ocupa a faixa dele inteira (inclusive o rodapé de navegação); um
@@ -2787,7 +2805,7 @@
 
     // Manutenção entra na fila com os outros para a barra não ficar furada.
     const bar = buttons
-      .filter((button) => !consulta.includes(button))
+      .filter((button) => !consulta.includes(button) && !inlineButtons.includes(button))
       .map((button, index) => ({
         index,
         text: button.text,
@@ -2800,6 +2818,34 @@
     alignButtonBar(bar, janela);
 
     const manutencaoEntry = bar.find((entry) => entry.maintenance);
+
+    // A barra da manutenção fica na linha e coluna em que ela foi desenhada,
+    // não quatro linhas abaixo do grid.
+    if (grid && hasInlineMaintenance) {
+      grid.gridMaintenance = true;
+      grid.gridInlineMaintenance = true;
+      grid.gridAutoButtonPosition = false;
+      grid.gridMaintenanceButtonColumn = Math.min(
+        ...inlineButtons.map((button) => button.column)
+      );
+      grid.gridMaintenanceButtonLine = pushDown(
+        Math.min(...inlineButtons.map((button) => button.line))
+      );
+      grid.gridAllowInsert = true;
+      grid.gridAllowRemove = true;
+      grid.gridRowEnter = true;
+
+      // Na manutenção em linha as colunas de dados são editadas na própria
+      // linha; a chave é a primeira delas.
+      const editaveis = grid.columns.filter((column) => column.type !== "checkheader");
+      editaveis.forEach((column) => {
+        column.editable = true;
+      });
+      if (editaveis.length && !editaveis.some((column) => column.recordKey)) {
+        editaveis[0].recordKey = true;
+        editaveis[0].required = true;
+      }
+    }
 
     const documentTabs = tabs.map((tab, index) => ({
       id: `aba${index + 1}`,

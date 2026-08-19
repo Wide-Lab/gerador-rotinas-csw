@@ -410,3 +410,26 @@ para o nome dele. É o caminho para quando o OCR não consegue dizer o que é aq
 **Validação nova.** Se sobrar um botão personalizado chamado *Consultar* ou *Limpar*, o
 validador avisa: `O botão "Consultar" faz o que o botão padrão da consulta já faz` —
 sugerindo remover, ou ligar o *Gerar BtnConsultar* no card do Grid.
+
+## Manutenção em linha detectada pelo print
+
+Um print com **Incluir**, **Manutenção** e **Remover** embaixo de um grid é uma manutenção
+em linha — quem desenha esses três botões é o próprio componente `btnManut`. Antes eles
+viravam botões personalizados e a tela saía com a barra duplicada.
+
+Agora, quando dois ou mais desses nomes aparecem numa tela com grid:
+
+- a opção **Gerar manutenção em linha no Grid** já vem marcada;
+- os botões saem da lista de personalizados (nada de barra repetida);
+- a tag fica na linha e coluna em que os botões estavam no print,
+  `; csw:btnManut:1,22,3300^ROTINA,3100^ROTINA,3200^ROTINA,41`;
+- as colunas de dados entram como editáveis e a primeira vira a chave do registro.
+
+É a mesma regra que já existia no importador do desenhador.
+
+## Checkbox lido do print
+
+O checkbox detectado pelas caixinhas marcadas saía sem tabela de opções e a rotina não
+compilava (`Campo "Inativo" é checkbox e não tem variável da tabela de opções`). Agora ele
+já vem com `TAB<VARIAVEL>`, com a opção de gerar a tabela ligada e um item com o texto
+lido do print.
