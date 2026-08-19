@@ -165,3 +165,39 @@ GerarGlobalTrabalho(codEmpresa,term,rotina,empresa)	;
 
 Os índices só entram quando o corpo realmente lê a global persistente, para não mudar a
 assinatura de quem não precisa.
+
+## Coluna do grid como chave da global
+
+Marcando **Chave** numa coluna do grid, a coluna passa a aparecer no combo *CAMPO CHAVE*
+de **Índices gerais da global** — antes só campos da seção *Campos* entravam ali, e o
+combo ficava vazio numa tela em que a chave do registro é uma coluna (Artigo, por
+exemplo). O índice também é criado sozinho, do mesmo jeito que acontece com um campo
+marcado como chave.
+
+O resultado é a global filtrada pela empresa e com a coluna como último subscrito:
+
+```
+^WDWDNEW015(codEmpresa,artigo)
+```
+
+Na RG isso vira o par certo — a base sem a chave para o merge e a chave como variável do
+`$order`:
+
+```objectscript
+GerarGlobalTrabalho(codEmpresa,term,rotina,empresa)	;
+	...
+	set artigo=""
+	for  set artigo=$order(^WDWDNEW015(codEmpresa,artigo)) quit:artigo=""!$$$ISERR(sc)  do
+	. set mtempWDWDNEW015=$get(^WDWDNEW015(codEmpresa,artigo))
+
+GravarConfiguracaoCargaMinimaPorArtigo(codEmpresa,term)	;
+	do $$$KillMergeG(^WDWDNEW015(codEmpresa),^mtempWDWDNEW015(term))
+```
+
+A chave que vem do grid **não** entra na lista de parâmetros da tela: ela chega pela linha
+selecionada, então a assinatura continua com `codEmpresa` e os filtros. Se o nome do
+parâmetro for trocado no painel de índices, a RG acompanha.
+
+Duas regras do validador foram ajustadas junto: a coluna chave não precisa mais de *piece*
+da global de trabalho (ela é o subscrito, não um pedaço do registro) e o aviso de "campo
+usado como chave mas não marcado como chave" não vale para colunas de grid.

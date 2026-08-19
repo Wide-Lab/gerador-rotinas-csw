@@ -1016,6 +1016,13 @@
       render();
     }
 
+    // A coluna chave do grid entra na lista de índices da global, então o
+    // painel de índices precisa ser redesenhado.
+    if (property === "recordKey") {
+      app.indexes.syncWithKeys();
+      app.indexes.render();
+    }
+
     app.refresh();
   }
 
@@ -1652,9 +1659,22 @@
     const index = marked >= 0 ? marked : fallback >= 0 ? fallback : firstData;
     const column = index >= 0 ? state.gridColumns[index] : null;
 
-    return column
-      ? { column, piece: index + 1, parameter: u.toParameter(column.title || column.variable) }
-      : null;
+    if (!column) return null;
+
+    // Se a coluna já é um índice da global, o nome do parâmetro vem de lá.
+    const indexEntry = state.globalIndexes.find(
+      (item) => item.type === "key" && item.fieldId === column.id
+    );
+
+    return {
+      column,
+      piece: index + 1,
+      parameter: u.normalizeParameter(
+        indexEntry ? indexEntry.parameterName : "",
+        u.toParameter(column.title || column.variable)
+      ),
+      isGlobalIndex: Boolean(indexEntry)
+    };
   }
 
   function maintenanceType(column) {
@@ -2811,6 +2831,18 @@
     return lines.join("\n");
   }
 
+  // Tira um subscrito da referência: ^G(codEmpresa,artigo) -> ^G(codEmpresa).
+  function removeSubscript(globalReference, subscript) {
+    const match = globalReference.match(/^([^(]+)\((.*)\)$/);
+    if (!match) return globalReference;
+
+    const remaining = match[2]
+      .split(",")
+      .filter((item) => item.trim() !== subscript);
+
+    return remaining.length ? `${match[1]}(${remaining.join(",")})` : match[1];
+  }
+
   function appendSubscript(globalReference, subscript) {
     if (!subscript) return globalReference;
     if (globalReference.includes("(")) {
@@ -2920,7 +2952,13 @@
     const filterArgs = allFilterParams.length ? `,${allFilterParams.join(",")}` : "";
     const columnVariables = uniqueColumnVariables();
     const key = recordKeyDefinition();
-    const baseReference = app.indexes.globalReference(config);
+    // Quando a coluna chave do grid também é índice da global, ela já vem no
+    // ^GLOBAL(codEmpresa,artigo). Aqui a base fica sem ela: o nó com a chave é
+    // montado adiante, para o $order poder percorrer os registros.
+    const baseReference =
+      key && key.isGlobalIndex
+        ? removeSubscript(app.indexes.globalReference(config), key.parameter)
+        : app.indexes.globalReference(config);
     const tabKeyDefs = gridTabKeyDefinitions(config);
     let persistentBase = config.gridGlobalSubscript
       ? appendSubscript(baseReference, config.gridGlobalSubscript)

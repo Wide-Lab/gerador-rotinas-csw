@@ -1,7 +1,43 @@
 (function (app) {
   const { state, utils: u, el } = app;
   const keyFields = () => state.fields.filter((field) => field.isKey && !app.fields.isAuxiliaryField(field));
-  const fieldById = (id) => state.fields.find((field) => field.id === id);
+
+  // Colunas de grid marcadas como chave do registro; elas também podem
+  // compor o índice da global.
+  function gridKeyColumns() {
+    const definitions = [];
+
+    const collect = (columns, origem) => {
+      if (!Array.isArray(columns)) return;
+      columns
+        .filter((column) => column.recordKey === true && column.type !== "checkheader")
+        .forEach((column) => {
+          if (definitions.some((item) => item.id === column.id)) return;
+          definitions.push({
+            id: column.id,
+            // A descrição vira o parâmetro sugerido, então guarda só o título.
+            description: column.title || column.variable,
+            label: `${origem}: ${column.title || column.variable}`,
+            variable: u.normalizeVariable(column.variable, "COLUNA"),
+            fromGrid: true
+          });
+        });
+    };
+
+    collect(state.parentGrid ? state.parentGrid.columns : null, "Grid");
+    state.tabs.forEach((tab) => collect(tab.grid ? tab.grid.columns : null, `Grid ${tab.title}`));
+    // O grid em edição ainda pode não ter sido gravado na definição.
+    collect(state.gridColumns, "Grid");
+
+    return definitions;
+  }
+
+  // Tudo que pode ser escolhido como chave do índice.
+  const selectableKeys = () => [...keyFields(), ...gridKeyColumns()];
+
+  const fieldById = (id) =>
+    state.fields.find((field) => field.id === id) ||
+    gridKeyColumns().find((column) => column.id === id);
   const isCompanyField = (field) =>
     u.normalizeVariable(field?.variable, "") === "CODEMP";
 
@@ -26,13 +62,32 @@
 
   function syncWithKeys() {
     const keys = keyFields();
-    state.globalIndexes = state.globalIndexes.filter((index) => index.type !== "key" || keys.some((field) => field.id === index.fieldId));
+    const selecionaveis = selectableKeys();
+    // Índice apontando para coluna de grid continua válido; só o que não
+    // existe mais é descartado.
+    state.globalIndexes = state.globalIndexes.filter(
+      (index) =>
+        index.type !== "key" || selecionaveis.some((field) => field.id === index.fieldId)
+    );
+    // Coluna de grid marcada como chave entra na global do mesmo jeito.
+    gridKeyColumns().forEach((column) => {
+      if (!state.globalIndexes.some((index) => index.type === "key" && index.fieldId === column.id)) {
+        state.globalIndexes.push(createKey(column.id));
+      }
+    });
+
     keys.forEach((field) => {
       if (!state.globalIndexes.some((index) => index.type === "key" && index.fieldId === field.id)) state.globalIndexes.push(createKey(field.id));
     });
   }
 
-  const keyOptions = (selected) => keyFields().map((field) => `<option value="${field.id}" ${field.id === selected ? "selected" : ""}>${u.escapeHtml(field.description)} (${u.escapeHtml(field.variable)})</option>`).join("");
+  const keyOptions = (selected) =>
+    selectableKeys()
+      .map(
+        (field) =>
+          `<option value="${field.id}" ${field.id === selected ? "selected" : ""}>${u.escapeHtml(field.label || field.description)} (${u.escapeHtml(field.variable)})</option>`
+      )
+      .join("");
 
   function render() {
     el.globalIndexesTableBody.innerHTML = "";
@@ -99,8 +154,14 @@
       : definitions;
   }
 
+  // A chave que vem de uma coluna do grid faz parte da global, mas não é
+  // filtro da tela: ela chega pela linha, então fica fora dos parâmetros.
+  function parameterKeyDefinitions(config = app.getConfig()) {
+    return effectiveKeyDefinitions(config).filter(({ field }) => field.fromGrid !== true);
+  }
+
   function macArguments(config = app.getConfig()) {
-    const result = effectiveKeyDefinitions(config).map(({ field }) =>
+    const result = parameterKeyDefinitions(config).map(({ field }) =>
       u.normalizeVariable(field.variable)
     );
     if (usesRoutineCompany(config)) result.unshift("CE");
@@ -108,7 +169,7 @@
   }
 
   function rgParameters(config = app.getConfig()) {
-    const result = effectiveKeyDefinitions(config).map(
+    const result = parameterKeyDefinitions(config).map(
       ({ parameterName }) => parameterName
     );
     if (usesRoutineCompany(config)) result.unshift("codEmpresa");
@@ -177,6 +238,9 @@
     addFixed,
     keyDefinitions,
     effectiveKeyDefinitions,
+    gridKeyColumns,
+    selectableKeys,
+    parameterKeyDefinitions,
     hasCompanyKey,
     usesRoutineCompany,
     macArguments,

@@ -383,7 +383,11 @@
   const variableOf = (field) => app.utils.normalizeVariable(field.variable, "");
 
   function checkKeysAndRules(add, config, state) {
-    const fieldById = new Map(state.fields.map((field) => [field.id, field]));
+    // A chave pode vir de um campo ou de uma coluna do grid.
+    const fieldById = new Map([
+      ...state.fields.map((field) => [field.id, field]),
+      ...app.indexes.gridKeyColumns().map((column) => [column.id, column])
+    ]);
     const keyIndexes = state.globalIndexes.filter((index) => index.type === "key");
 
     if (config.useRules && config.routineMode === "crud" && !keyIndexes.length) {
@@ -414,7 +418,8 @@
         );
       }
 
-      if (!field.isKey) {
+      // Coluna de grid não tem o marcador "chave" da seção Campos.
+      if (!field.isKey && field.fromGrid !== true) {
         add.warn(
           "indice-campo-nao-chave",
           `O campo "${field.description}" é usado como chave da global mas não está marcado como chave.`,
@@ -780,7 +785,8 @@
         }
 
         const piece = Number(column.workPiece);
-        if (column.type !== "checkheader" && !(piece > 0)) {
+        // A coluna chave é o subscrito da global de trabalho, não um piece.
+        if (column.type !== "checkheader" && column.recordKey !== true && !(piece > 0)) {
           add.warn(
             "grid-coluna-sem-piece",
             `${where}: a coluna "${column.title || variable}" não tem piece da global de trabalho.`,
