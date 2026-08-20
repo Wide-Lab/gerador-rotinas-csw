@@ -81,12 +81,14 @@
     [/grid|table|tabela|grade|datagrid/, "grid"],
     [/tabpanel|tabs|abas/, "tabstrip"],
     [/\btab\b|\baba\b/, "tab"],
+    // Radio e checkbox vêm antes do botão: "RadioButton" e "CheckButton"
+    // casariam com a regra do botão e virariam botão na tela.
+    [/radio|opcao|opção|option/, "radio"],
+    [/checkbox|check/, "checkbox"],
     [/button|botao|btn/, "button"],
     [/display/, "display"],
     [/csle|input|leitor|textbox|textfield|campo|edit\b/, "input"],
-    [/checkbox|check/, "checkbox"],
     [/combo|select|dropdown/, "combo"],
-    [/radio|opcao|opção|option/, "radio"],
     [/textarea|memo/, "textarea"],
     [/date|data/, "date"],
     [/label|texto|text|title|titulo/, "label"]
@@ -878,7 +880,7 @@
 
     const fields = inputs.concat(displayOnly).map((input, position) => {
       const isDisplayOnly = displayOnly.includes(input);
-      const description = labelFor(input) || `Campo ${position + 1}`;
+      let description = labelFor(input) || `Campo ${position + 1}`;
       const display = isDisplayOnly ? input : displayFor(input);
       const inferred = helpers.inferType(description);
       const sample = sampleOf(input, description);
@@ -889,6 +891,22 @@
         isDisplayOnly || selectionDisplay
           ? "multiSelect"
           : kindToType[input.kind] || typeFromSample(sample) || inferred || "string";
+      // Radio, combo ou check desenhado só com as opções: o texto é a lista,
+      // não o rótulo do campo.
+      const drawnOptions =
+        ["radio", "combo", "checkbox"].includes(type) && !labelOwner.get(input)
+          ? optionsFromSample(String(input.text || ""))
+          : null;
+
+      if (drawnOptions) {
+        description = "Opção";
+        warnings.push(
+          `Um ${type} veio no desenho só com as opções (${drawnOptions
+            .map((option) => option.description)
+            .join(", ")}). O campo ficou como "Opção" — renomeie para o nome que a tela usa.`
+        );
+      }
+
       const line = toLine(input.y);
 
       // No desenhador o texto do label termina na borda direita da caixa; é
@@ -948,7 +966,7 @@
           .normalizeVariable(description, "OPCAO")
           .slice(0, 8)}`;
 
-        const options = optionItemsOf(input) || optionsFromSample(sample);
+        const options = optionItemsOf(input) || drawnOptions || optionsFromSample(sample);
         if (options) {
           field.createOptionsTable = true;
           field.optionsItems = options;
@@ -1023,7 +1041,17 @@
     // Abaixo do último campo: o grid pega a largura toda, então não cabe ao
     // lado deles.
     const fieldsBottom = fields.length
-      ? Math.max(...fields.map((field) => Math.max(field.inputLine, field.labelLine)))
+      ? Math.max(
+          ...fields.map((field) =>
+            Math.max(
+              field.labelLine,
+              // Área de texto ocupa mais de uma linha.
+              field.inputLine +
+                (field.type === "textArea" ? Math.max(1, Number(field.textAreaHeight) || 3) : 1) -
+                1
+            )
+          )
+        )
       : 0;
 
     const documentGrids = grids.map((grid, index) => {

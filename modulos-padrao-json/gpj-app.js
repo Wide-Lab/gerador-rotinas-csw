@@ -313,7 +313,10 @@
       ...fields.map((field) =>
         Math.max(
           Number(field.labelLine) || 0,
-          Number(field.inputLine) || 0,
+          // A área de texto ocupa mais de uma linha.
+          (Number(field.inputLine) || 0) +
+            (field.type === "textArea" ? Math.max(1, Number(field.textAreaHeight) || 3) : 1) -
+            1,
           field.hasDisplay === true ? Number(field.displayLine) || 0 : 0
         )
       )

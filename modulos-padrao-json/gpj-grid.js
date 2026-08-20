@@ -207,11 +207,17 @@
       ...fields.map((field) =>
         Math.max(
           Number(field.labelLine) || 0,
-          Number(field.inputLine) || 0,
+          // A área de texto ocupa mais de uma linha; o que vem depois começa
+          // abaixo dela, não da primeira linha dela.
+          (Number(field.inputLine) || 0) + fieldHeight(field) - 1,
           field.hasDisplay === true ? Number(field.displayLine) || 0 : 0
         )
       )
     );
+  }
+
+  function fieldHeight(field) {
+    return field.type === "textArea" ? Math.max(1, Number(field.textAreaHeight) || 3) : 1;
   }
 
   function suggestedGridLinePosition(locationId = "parent") {

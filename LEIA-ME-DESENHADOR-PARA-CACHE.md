@@ -400,3 +400,31 @@ colchetes de fora e às vezes com uma chave sobrando no fim:
 Isso não é JSON válido e o painel só respondia "JSON inválido". Agora ele varre o texto e
 recolhe os objetos completos do primeiro nível, ignorando o que estiver solto em volta —
 colar o arquivo inteiro ou só o trecho das telas dá no mesmo.
+
+## Radio virando botão e área de texto por cima do grid
+
+Duas coisas que apareceram no desenho "Novoooo":
+
+**O grupo de opções virava um botão.** O desenhador nomeia o componente `RadioButton`, e a
+regra de classificação testava `button` **antes** de `radio` — o grupo `● Aberto ●
+Encerrado ● Todos` saía na tela como "Botão 1". Radio e checkbox agora são testados antes
+do botão.
+
+Junto veio o resto do radio: quando ele é desenhado sem label, o texto é a **lista de
+opções**, não o nome do campo. Antes virava um label gigante (`Aberto/Encerrado/Todos`) com
+a tabela de opções vazia. Agora sai assim, com aviso para renomear o campo:
+
+```objectscript
+	set sc=$$ObterTabOpcao^WDWDNEW016RG(.TABOPCAO)
+1300ON	do ^%CSLE(5,59,12,"OPC",OPC,,,,",,,cp1300",,,,,3,.TABOPCAO)
+```
+
+**A área de texto ficava por baixo do grid.** O grid nasce duas linhas depois do último
+campo, mas a conta usava só a linha do leitor — e uma área de texto ocupa três. O grid
+subia para cima da Observação. A altura do campo agora entra na conta, no importador e
+também no posicionamento automático do app:
+
+```
+antes:  Observação na linha 8, grid em LinPos=10   (por cima)
+agora:  Observação na linha 8 (8..10), grid em LinPos=12
+```
