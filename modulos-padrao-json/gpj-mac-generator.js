@@ -361,7 +361,7 @@
       (field) => {
         if (
           app.fields
-            .isKeyField(field)
+            .usesOwnVariable(field)
         ) {
           variables.add(
             u.normalizeVariable(
@@ -527,7 +527,7 @@
       .filter(
         (field) =>
           app.fields
-            .isKeyField(field)
+            .usesOwnVariable(field)
       )
       .forEach((field) => {
         const variable =

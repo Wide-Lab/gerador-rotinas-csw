@@ -838,12 +838,42 @@
     return u.normalizeVariable(tab?.dataVariable, config.dataVariable);
   }
 
+  // Campos da rotina principal, na ordem em que são lidos.
+  function parentReadingOrder() {
+    return mainFields().filter((field) => (field.tabId || "parent") === "parent");
+  }
+
+  // Antes da chave a tela ainda está identificando o registro; o que é lido
+  // aí precisa de variável própria, porque o Obter/Inicializar da chave
+  // reinicializa a variável de dados.
+  function isBeforeKeyField(field) {
+    if (!field || isKeyField(field) || isMultiSelect(field)) return false;
+    if (isAuxiliaryField(field) || isGridTabField(field)) return false;
+    if ((field.tabId || "parent") !== "parent") return false;
+
+    const order = parentReadingOrder();
+    const position = order.indexOf(field);
+    if (position < 0) return false;
+
+    const lastKey = order.reduce(
+      (result, item, index) => (isKeyField(item) ? index : result),
+      -1
+    );
+
+    return lastKey > position;
+  }
+
+  // Campo que guarda o valor numa variável só dele, não num piece.
+  function usesOwnVariable(field) {
+    return isKeyField(field) || isBeforeKeyField(field);
+  }
+
   function pieceAssignments(config = app.getConfig()) {
     const counters = new Map();
     const result = new Map();
 
     mainFields().forEach((field) => {
-      if (isKeyField(field) || isMultiSelect(field) || isGridTabField(field)) return;
+      if (usesOwnVariable(field) || isMultiSelect(field) || isGridTabField(field)) return;
 
       const dataVariable = dataVariableFor(field, config);
       const piece = (counters.get(dataVariable) || 2) + 1;
@@ -859,7 +889,7 @@
       return multiSelectInputVariable(field);
     }
 
-    if (isKeyField(field) || isGridTabField(field)) {
+    if (usesOwnVariable(field) || isGridTabField(field)) {
       return u.normalizeVariable(field.variable);
     }
 
@@ -871,11 +901,18 @@
     const variables = [];
 
     mainFields().forEach((field) => {
-      if (isKeyField(field) || isMultiSelect(field) || isGridTabField(field)) return;
+      if (usesOwnVariable(field) || isMultiSelect(field) || isGridTabField(field)) return;
 
       const variable = dataVariableFor(field, config);
       if (!variables.includes(variable)) variables.push(variable);
     });
+
+    // A RG do cadastro sempre grava a variável base (data/hora e operador nos
+    // dois primeiros pieces), mesmo quando nenhum campo mora nela.
+    if (config.routineMode === "crud") {
+      const base = u.normalizeVariable(config.dataVariable, "DADOS");
+      if (!variables.includes(base)) variables.unshift(base);
+    }
 
     return variables;
   }
@@ -1017,6 +1054,8 @@
     normalizedDecimalFormat,
     isTabKey,
     isKeyField,
+    isBeforeKeyField,
+    usesOwnVariable,
     createField,
     defaultLayout,
     layoutForLocation,

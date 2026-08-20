@@ -243,3 +243,34 @@ mesmo `btREMOVERTODOS`, e o CSW ligava os dois no mesmo controle. Agora o segund
 Efeito colateral esperado: telas que não têm campo chave nenhum passaram a acusar
 "Nenhuma chave foi definida nos índices da global" — antes a chave do grid de aba
 mascarava o problema.
+
+## Correção — campo antes da chave sendo apagado
+
+Na tela Workflow o código da empresa sumia assim que o operador passava para o campo
+seguinte. O campo Empresa tinha virado um piece da variável de dados do registro:
+
+```objectscript
+1000ON	do ^%CSLE(2,15,8,"$piece(WDNRWORK,Z,3)",$piece(WDNRWORK,Z,3),...)
+```
+
+Só que logo depois da chave a rotina carrega o registro, e as duas saídas do carregamento
+zeram essa variável:
+
+```objectscript
+	set sc=$$ObterWorkflow^WDNRWORK002ARG(CE,CODWOR,.WDNRWORK,...)   ; set wdnrwork=""
+	if $$$ISERR(sc) do InicializarWorkflow^WDNRWORK002ARG(...)        ; set wdnrwork=""
+```
+
+O piece 3 ia junto, e o `8000` redesenhava o campo vazio.
+
+Um campo lido **antes** da chave ainda faz parte da identificação do registro, não do
+conteúdo dele — então agora ele ganha variável própria, como os campos chave já tinham:
+
+```objectscript
+1000ON	do ^%CSLE(2,15,8,"CODEMP",CODEMP,,,,",%EMP^CCAFC299,,cp1000")
+```
+
+A variável entra no `New` e no reset do `0500` (com a exceção que já existia para `CODEMP`,
+que vem da empresa da sessão). A variável de dados base continua declarada e passada para
+a RG mesmo quando nenhum campo mora nela — ela guarda data/hora e operador nos dois
+primeiros pieces.
