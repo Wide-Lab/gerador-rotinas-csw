@@ -428,3 +428,39 @@ também no posicionamento automático do app:
 antes:  Observação na linha 8, grid em LinPos=10   (por cima)
 agora:  Observação na linha 8 (8..10), grid em LinPos=12
 ```
+
+## Tela Workflow: cinco ajustes de uma vez
+
+**O cabeçalho da tela de fora sumia.** Numa tela com abas, os campos que ficam *acima* do
+TabPanel (Empresa, Cód. Workflow) eram descartados: a conversão decidia pelo caminho das
+abas antes de montar os campos. Agora eles entram na rotina pai:
+
+```
+; csw:label:6,2,7,Empresa
+; csw:display:24,2,28,ds1000
+; csw:label:1,3,12,Cód. Workflow*
+; csw:display:24,3,28,ds1100
+```
+
+E um campo do cabeçalho chamado "Código…" (inclusive "Cód. Workflow") já vem marcado como
+chave.
+
+**Tudo saía empurrado para a direita.** A escala vinha de dividir a largura do conteúdo
+desenhado por 108 colunas. Numa aba estreita (conteúdo até 476px) isso dava célula de 4px,
+e um leitor desenhado na coluna 9 nascia na coluna 25. A célula agora tem piso pela
+proporção de fonte de terminal (quase metade da altura da linha).
+
+**Botão de 200px virava botão de 45 colunas.** O retângulo do botão no desenho é sempre o
+mesmo; quem manda é o texto. `Detalhar Pedido` agora sai com 19 colunas, não com a tela
+inteira.
+
+**"Excluir" ao lado de Incluir/Manutenção** é o botão de remover da manutenção em linha.
+Sem isso a aba saía com quatro botões: os três do `btnManut` mais o Excluir desenhado.
+
+**Display sozinho não é mais multi-seleção por padrão.** Um Display com label e sem leitor
+só vira multi-seleção quando tem um botão do lado (o "+" que abre a escolha). Sem botão é
+campo informativo comum — antes ganhava todo o ciclo de incluir/excluir item.
+
+**Grid que não cabe.** Um grid de 18 colunas somava 220 caracteres numa tela de 104. As
+colunas maiores encolhem até caber, respeitando um mínimo por tipo (número 6, data 10,
+texto 8); quando nem no mínimo cabe, o aviso diz o tamanho real e sugere tirar colunas.

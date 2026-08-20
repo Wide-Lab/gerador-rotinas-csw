@@ -177,7 +177,11 @@
       28;
 
     const right = Math.max(1, ...components.map((item) => item.right));
-    const cellWidth = Math.max(4, right / Math.max(1, columns));
+
+    // Numa tela de terminal o caractere é quase metade da altura da linha.
+    // Sem esse piso, um desenho estreito (uma aba, por exemplo) devolvia
+    // célula de 4px e jogava campo e botão para o fim da tela.
+    const cellWidth = Math.max(4, cellHeight * 0.45, right / Math.max(1, columns));
 
     return { cellWidth: Number(cellWidth.toFixed(2)), cellHeight };
   }
@@ -307,6 +311,37 @@
 
   // Barra de botões: todos na mesma linha ganham a mesma largura e o mesmo
   // espaçamento, na ordem em que aparecem no desenho.
+  function columnMinimum(column) {
+    if (column.type === "checkheader") return 4;
+    if (["n", "v2", "v3"].includes(column.type)) return 6;
+    if (column.type === "d") return 10;
+    return 8;
+  }
+
+  function fitGridColumns(gridColumns, available) {
+    const soma = () => gridColumns.reduce((total, column) => total + column.width, 0);
+    const antes = soma();
+    if (antes <= available) return 0;
+
+    const ordered = [...gridColumns].sort((a, b) => b.width - a.width);
+
+    while (soma() > available) {
+      let changed = false;
+
+      ordered.forEach((column) => {
+        if (soma() <= available) return;
+        if (column.width > columnMinimum(column)) {
+          column.width -= 1;
+          changed = true;
+        }
+      });
+
+      if (!changed) break;
+    }
+
+    return antes;
+  }
+
   function alignButtonBar(entries, columns) {
     const byLine = new Map();
 
@@ -387,7 +422,7 @@
   const CONSULT_PATTERN = /^(consultar?|pesquisar?|limpar|filtrar)$/i;
 
   // Botões que o próprio btnManut desenha.
-  const MAINTENANCE_PATTERN = /^(incluir|inserir|novo|manuten[çc][ãa]o|remover)$/i;
+  const MAINTENANCE_PATTERN = /^(incluir|inserir|novo|manuten[çc][ãa]o|remover|excluir)$/i;
 
   // "+ Incluir" é o mesmo "Incluir"; o "+" é só enfeite do desenho.
   function buttonLabel(text) {
@@ -425,6 +460,15 @@
     condicaoVenda: "CODCONVEN",
     tabelaPreco: "CODTABPRE"
   };
+
+  // O retângulo do botão no desenho é sempre 200px; o que manda é o texto.
+  function buttonSizeFactory(toSize) {
+    return (button) => {
+      const text = buttonLabel(button.text);
+      const drawn = toSize(button.width);
+      return Math.max(8, Math.min(drawn || 99, text.length + 4));
+    };
+  }
 
   // Dois botões com o mesmo texto não podem dividir o id do controle.
   function buttonIdFactory() {
@@ -500,6 +544,7 @@
     const helpers = helpersFor();
     const used = new Set();
     const uniqueButtonId = buttonIdFactory();
+    const buttonSize = buttonSizeFactory(toSize);
 
     // Abas do desenhador apontando para outras telas do arquivo.
     function linkedTabsFrom(list) {
@@ -528,7 +573,7 @@
         .filter((tab) => tab.title);
     }
 
-    function convertLinkedTabs(linked) {
+    function convertLinkedTabs(linked, parentFields = []) {
       const parentName = app.utils.normalizeVariable(
         first(options.routineName, screen.id, screen.name, "ROTINANOVA"),
         "ROTINANOVA"
@@ -539,7 +584,8 @@
 
       const panelWidth = Math.max(40, columns - 2);
       const documentTabs = [];
-      const allFields = [];
+      // O cabeçalho fica na rotina pai, acima do TabPanel.
+      const allFields = parentFields.map((field) => ({ ...field, tabId: "parent" }));
       const allGrids = [];
       const allButtons = [];
       const notes = [];
@@ -613,8 +659,16 @@
       });
 
       if (!allFields.some((field) => field.isKey)) {
+        const codigo = allFields.find((field) => /^(codigo|cod|code)\b/.test(flat(field.description)));
+        if (codigo) {
+          codigo.isKey = true;
+          codigo.required = true;
+        }
+      }
+
+      if (!allFields.some((field) => field.isKey)) {
         notes.push(
-          "A tela de fora só tem as abas e os botões, então nenhum campo veio como chave. Marque a chave nos Índices gerais da global antes de gerar a RG."
+          "Nenhum campo veio marcado como chave. Marque a chave nos Índices gerais da global antes de gerar a RG."
         );
       }
 
@@ -633,7 +687,7 @@
         text: buttonLabel(button.text) || `Botão ${index + 1}`,
         line: toLine(button.y),
         column: toColumn(button.x),
-        size: Math.max(8, toSize(button.width))
+        size: buttonSize(button)
       }));
 
       alignButtonBar(bar, columns);
@@ -688,8 +742,6 @@
       };
     }
 
-    const linkedTabs = options.nested ? [] : linkedTabsFrom(components);
-    if (linkedTabs.length) return convertLinkedTabs(linkedTabs);
 
     const unknown = new Map();
     components
@@ -878,6 +930,17 @@
         if (owner) labelOwner.set(owner, label);
       });
 
+    // Display solto vira multi-seleção só quando tem um botão do lado (o "+"
+    // que abre a escolha). Sem botão é um campo informativo comum.
+    const multiSelectDisplays = displayOnly.filter((display) =>
+      buttons.some(
+        (button) =>
+          Math.abs(button.y - display.y) <= cellHeight * 0.8 &&
+          button.x >= display.right - cellWidth * 2 &&
+          button.x - display.right <= cellWidth * 8
+      )
+    );
+
     const fields = inputs.concat(displayOnly).map((input, position) => {
       const isDisplayOnly = displayOnly.includes(input);
       let description = labelFor(input) || `Campo ${position + 1}`;
@@ -888,9 +951,11 @@
       const selectionDisplay =
         Boolean(display) && /^selecionad/i.test(String(display.text || "").trim());
       const type =
-        isDisplayOnly || selectionDisplay
+        multiSelectDisplays.includes(input) || selectionDisplay
           ? "multiSelect"
-          : kindToType[input.kind] || typeFromSample(sample) || inferred || "string";
+          : isDisplayOnly
+            ? typeFromSample(sample) || inferred || "string"
+            : kindToType[input.kind] || typeFromSample(sample) || inferred || "string";
       // Radio, combo ou check desenhado só com as opções: o texto é a lista,
       // não o rótulo do campo.
       const drawnOptions =
@@ -977,6 +1042,10 @@
     });
 
     reflowFields(fields, columns);
+
+    // Depois dos campos: o cabeçalho da tela de fora entra na rotina pai.
+    const linkedTabs = options.nested ? [] : linkedTabsFrom(components);
+    if (linkedTabs.length) return convertLinkedTabs(linkedTabs, fields);
 
     const routineName = app.utils.normalizeVariable(
       first(options.routineName, screen.id, screen.name, "ROTINANOVA"),
@@ -1081,6 +1150,18 @@
         );
       }
 
+      const largura = options.nested ? Math.max(40, columns - 4) : columns - 2;
+      const antes = fitGridColumns(gridColumns, largura);
+
+      if (antes) {
+        const depois = gridColumns.reduce((soma, column) => soma + column.width, 0);
+        warnings.push(
+          depois <= largura
+            ? `O grid tem ${gridColumns.length} colunas somando ${antes} caracteres e a tela tem ${largura}: as colunas maiores foram encolhidas para caber. Revise as larguras.`
+            : `O grid tem ${gridColumns.length} colunas e não cabe na tela: mesmo no tamanho mínimo são ${depois} caracteres para ${largura}. Tire colunas ou aceite a rolagem lateral.`
+        );
+      }
+
       const acoes = (Array.isArray(grid.columns) ? grid.columns : []).some((column) =>
         CONTROL_COLUMN.test(flat(String(first(column?.title, column?.text, column?.label, ""))))
       );
@@ -1155,7 +1236,7 @@
         text: button.text || `Botão ${index + 1}`,
         line: pushDown(toLine(button.y)),
         column: toColumn(button.x),
-        size: Math.max(8, toSize(button.width)),
+        size: buttonSize(button),
         maintenance: button === maintenance
       }));
 
