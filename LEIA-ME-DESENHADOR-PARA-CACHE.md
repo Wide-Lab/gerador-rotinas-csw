@@ -293,3 +293,46 @@ botões restantes: Cancelar (col 40) · Excluir (54) · Importar (67) · Histór
 ```
 
 O desenho sem esses botões (`WDWDNEW010`) continua sem manutenção em linha, como antes.
+
+## Tela de cadastro com grid ao lado (Cadastro de Coleções)
+
+Esse desenho quebrou várias suposições do importador de uma vez. O que mudou:
+
+**O nome do campo é o label, não o texto de dentro do leitor.** No desenho o Csle vem com
+um valor de exemplo (`1`, `Colecao Premium`, `Ativo / Inativo`) e o importador usava esse
+texto como nome — saíam variáveis como `C1`, `COLPRE` e `ATIINA`, e um parâmetro chamado
+`1` na RG, que nem compila. Agora o label à esquerda manda; o texto do componente só vira
+nome quando não existe label (checkbox e radio, que carregam o texto dentro).
+
+**O valor de exemplo virou informação útil.** Ele diz o tipo melhor que o nome:
+`1` → inteiro, `21/03/2025` → data, `1.234,56` → decimal. E `Ativo / Inativo`, separado
+por barra, vira a tabela de opções do combo com as duas opções.
+
+**Combo, radio e check sempre saem com a variável da tabela** (`TABSITUACAO`), mesmo quando
+o desenho não trouxe as opções — sem ela a rotina não compila.
+
+**Multi-seleção.** Leitor com um display escrito "Selecionados" ao lado é o componente de
+multi-seleção: o campo vira `multiSelect`, ganha `TAB<VARIAVEL>` e o ciclo de incluir/
+excluir item na tela.
+
+**O grid desce para baixo dos campos.** No CSW o grid ocupa a largura inteira da janela,
+então grid desenhado *ao lado* do formulário vira grid *embaixo* dele. A linha do grid
+agora é fixada pelo importador (antes a tela recalculava por conta própria e a tag saía
+com `LinPos=10; LinIni=4; LinFim=7`, três valores que não conversam), a altura vem do
+desenho e os botões que ficavam na faixa do grid descem para baixo dele.
+
+**Coluna "Ações".** Vira a coluna de marcação do grid, com um aviso: o menu por linha
+(`TbCellClick` + `^%CSW1MENUCLICK`) continua sendo escrito à mão.
+
+**Confirmar + Cancelar.** Sem grid na tela principal, os dois viram o `btnManter` do
+cadastro (`; csw:btnManter:13,10,3000^ROTINA,0500^ROTINA,Excluir^ROTINA`) e somem da lista
+de botões personalizados. Com grid na tela principal a rotina sai no modo Grid, onde o
+label 3000 é o foco do grid e não a gravação — aí eles continuam botões comuns e o
+importador avisa que, se a tela é um cadastro, o caminho é trocar o modo para CRUD.
+
+**Chave do cadastro.** Num cadastro sem grid, o campo "Código" já vem marcado como chave.
+
+**Nome de parâmetro e de variável nunca começa com dígito** (`gpj-utils.js`), e a variável
+do laço do `GerarGlobalTrabalho` não repete um parâmetro da assinatura: um filtro "Código"
+e a coluna chave "Codigo" davam os dois em `cod`, e o `new sc,cod` apagava o filtro que
+tinha acabado de chegar. Agora o laço usa `cod2`.

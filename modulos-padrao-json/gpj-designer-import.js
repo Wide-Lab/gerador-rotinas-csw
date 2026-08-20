@@ -200,7 +200,7 @@
     if (GRID_COLUMN_TYPES[declared]) return GRID_COLUMN_TYPES[declared];
 
     const name = flat(title);
-    if (/^check|^sel\b|marca/.test(name)) return "checkheader";
+    if (/^check|^sel\b|marca|^acoes?$|^acao$/.test(name)) return "checkheader";
     if (/data|dt\b|previsao|vencimento|emissao/.test(name)) return "d";
     if (/quantidade|qtd|valor|preco|percent|saldo|peso/.test(name)) return "v3";
     if (/codigo|numero|num\b|seq|pedido|\bop\b/.test(name)) return "n";
@@ -240,6 +240,8 @@
     return Math.max(10, title.length + 2);
   }
 
+  const CONTROL_COLUMN = /^(check|selecionar|selecao|marcar|marca|acoes|acao|editar)$/;
+
   function normalizeGridColumns(source, cellWidth, helpers, rows = []) {
     const list = Array.isArray(source) ? source : [];
     const used = new Set();
@@ -260,9 +262,11 @@
       const sampled = typeFromSamples(samples);
       const declared = isText ? "" : flat(first(item.dataType, item.tipo, item.type, ""));
 
-      // "link" é a coluna de ação/marcação do desenhador.
+      // "link" é a coluna de ação/marcação do desenhador; o título sozinho
+      // também basta ("Ações", "Check", "Selecionar").
+      const controlTitle = CONTROL_COLUMN.test(flat(title));
       const type =
-        declared === "link" && /check|sel|marca|a[çc][õo]es|editar/i.test(title)
+        controlTitle || (declared === "link" && /check|sel|marca|a[çc][õo]es|editar/i.test(title))
           ? "checkheader"
           : sampled || gridColumnType(isText ? null : item, title);
 
@@ -375,6 +379,10 @@
   // Botões que o próprio btnManut desenha.
   const MAINTENANCE_PATTERN = /^(incluir|inserir|novo|manuten[çc][ãa]o|remover)$/i;
 
+  // Barra Confirmar/Cancelar do cadastro (btnManter).
+  const SAVE_PATTERN = /^(confirmar|gravar|salvar)$/i;
+  const CANCEL_PATTERN = /^(cancelar)$/i;
+
   // Tamanho usual do código em cada consulta padrão.
   const LOOKUP_SIZES = {
     empresa: 6,
@@ -484,9 +492,6 @@
     }
 
     function labelFor(input) {
-      const own = input.text && !PLACEHOLDER.test(input.text) ? input.text : "";
-      if (own) return own;
-
       const sameLine = labels.filter(
         (label) =>
           Math.abs(label.y - input.y) <= cellHeight * 0.8 &&
@@ -496,9 +501,58 @@
           !PLACEHOLDER.test(label.text)
       );
 
-      if (!sameLine.length) return "";
+      if (sameLine.length) return sameLine.sort((a, b) => b.right - a.right)[0].text;
 
-      return sameLine.sort((a, b) => b.right - a.right)[0].text;
+      // Sem label ao lado, o texto do próprio componente vira o nome — é o
+      // caso do checkbox e do radio, que carregam o texto dentro.
+      return input.text && !PLACEHOLDER.test(input.text) ? input.text : "";
+    }
+
+    // O que sobra dentro do leitor depois de achar o label é um valor de
+    // exemplo; ele diz o tipo melhor que o nome do campo.
+    function sampleOf(input, description) {
+      const own = String(input.text || "").trim();
+      if (!own || PLACEHOLDER.test(own) || own === description) return "";
+      return own;
+    }
+
+    function typeFromSample(sample) {
+      if (!sample) return "";
+      if (DATE_SAMPLE.test(sample)) return "date";
+      if (/^-?[\d.]+,\d+$/.test(sample)) return "decimal";
+      if (/^\d+$/.test(sample)) return "integer";
+      return "";
+    }
+
+    // Texto de exemplo separado por barra é a lista de opções do combo:
+    // "Ativo / Inativo" vira duas opções.
+    function optionsFromSample(sample) {
+      if (!sample) return null;
+
+      const parts = sample
+        .split(/\s*[\/|;]\s*/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      if (parts.length < 2) return null;
+
+      return parts.map((description, position) => ({
+        value: String(position + 1),
+        description
+      }));
+    }
+
+    // Número não precisa de leitor largo, mesmo que o desenho esteja largo.
+    function sizeFor(type, input, description) {
+      const drawn = Math.max(
+        6,
+        toSize(input.width) || helpers.defaultSize(type, description)
+      );
+
+      if (type === "date") return 8;
+      if (type === "integer") return Math.min(drawn, 10);
+      if (type === "decimal") return Math.min(drawn, 14);
+      return drawn;
     }
 
     function displayFor(input) {
@@ -559,9 +613,14 @@
       const description = labelFor(input) || `Campo ${position + 1}`;
       const display = isDisplayOnly ? input : displayFor(input);
       const inferred = helpers.inferType(description);
-      const type = isDisplayOnly
-        ? "multiSelect"
-        : kindToType[input.kind] || inferred || "string";
+      const sample = sampleOf(input, description);
+      // Leitor com um display "Selecionados" ao lado é multi-seleção.
+      const selectionDisplay =
+        Boolean(display) && /^selecionad/i.test(String(display.text || "").trim());
+      const type =
+        isDisplayOnly || selectionDisplay
+          ? "multiSelect"
+          : kindToType[input.kind] || typeFromSample(sample) || inferred || "string";
       const line = toLine(input.y);
 
       // No desenhador o texto do label termina na borda direita da caixa; é
@@ -592,8 +651,7 @@
         inputColumn,
         inputSize: isDisplayOnly
           ? 8
-          : LOOKUP_SIZES[lookup] ||
-            Math.max(6, toSize(input.width) || helpers.defaultSize(type, description)),
+          : LOOKUP_SIZES[lookup] || sizeFor(type, input, description),
         hasDisplay: Boolean(display) && !["date", "textArea"].includes(type),
         displayLine: line,
         displayColumn: display ? toColumn(display.x) : inputColumn + toSize(input.width) + 2,
@@ -608,13 +666,18 @@
         field.multiSelectSelectedText = "Selecionados";
       }
 
-      const options = optionItemsOf(input);
-      if (options && ["radio", "combo", "checkbox"].includes(type)) {
+      if (["radio", "combo", "checkbox"].includes(type)) {
+        // Sem a variável da tabela o campo não compila, mesmo quando o
+        // desenho não trouxe as opções.
         field.optionsVariable = `TAB${app.utils
           .normalizeVariable(description, "OPCAO")
           .slice(0, 8)}`;
-        field.createOptionsTable = true;
-        field.optionsItems = options;
+
+        const options = optionItemsOf(input) || optionsFromSample(sample);
+        if (options) {
+          field.createOptionsTable = true;
+          field.optionsItems = options;
+        }
       }
 
       return field;
@@ -644,11 +707,31 @@
 
     const gridLocation = documentTabs.length ? documentTabs[0].id : "parent";
 
+    // Confirmar/Gravar com Cancelar ao lado é a barra do btnManter; o
+    // componente desenha os dois sozinho.
+    const saveButton = buttons.find((button) => SAVE_PATTERN.test(button.text.trim()));
+    const cancelPair = buttons.find((button) => CANCEL_PATTERN.test(button.text.trim()));
+    // Cancelar sozinho continua sendo um botão comum; ele só some da lista
+    // quando faz par com o Confirmar.
+    // Grid na tela principal joga a rotina para o modo Grid, onde o 3000 é
+    // o foco do grid e não a gravação.
+    const gridInParent = grids.length > 0 && documentTabs.length === 0;
+    const manterPair = Boolean(saveButton && cancelPair) && !gridInParent;
+
+    if (saveButton && cancelPair && gridInParent) {
+      warnings.push(
+        `Os botões "${saveButton.text}" e "${cancelPair.text}" ficaram como botões comuns: com grid na tela principal a rotina sai no modo Grid, onde o label 3000 é o foco do grid. Se a tela é um cadastro, troque o modo para Cadastro (CRUD) e ligue o btnManter.`
+      );
+    }
+    const cancelButton = manterPair ? cancelPair : null;
+
     // Só faz sentido como btnManter numa rotina de cadastro; em consulta com
     // grid o "Manutenção" é um botão comum.
-    const maintenance = grids.length
-      ? null
-      : buttons.find((button) => /manuten/i.test(button.text));
+    const maintenance = manterPair
+      ? saveButton
+      : grids.length
+        ? null
+        : buttons.find((button) => /manuten/i.test(button.text));
 
     // Incluir + Manutenção + Remover no desenho: é a manutenção em linha do
     // grid. O btnManut cobre os três, então eles saem da lista de botões.
@@ -658,15 +741,24 @@
     const hasInlineMaintenance = inlineButtons.length >= 2;
     const consult = buttons.filter((button) => CONSULT_PATTERN.test(button.text.trim()));
     const extraButtons = buttons.filter(
-      (button) => button !== maintenance && !consult.includes(button)
+      (button) =>
+        button !== maintenance && button !== cancelButton && !consult.includes(button)
     );
 
-    // Primeiro botão que aparece abaixo de cada grid.
-    const buttonLines = buttons.map((button) => toLine(button.y));
+    // Abaixo do último campo: o grid pega a largura toda, então não cabe ao
+    // lado deles.
+    const fieldsBottom = fields.length
+      ? Math.max(...fields.map((field) => Math.max(field.inputLine, field.labelLine)))
+      : 0;
 
     const documentGrids = grids.map((grid, index) => {
-      const line = toLine(grid.y);
-      const below = buttonLines.filter((buttonLine) => buttonLine > line);
+      const line = Math.max(toLine(grid.y), fieldsBottom + 2);
+
+      // Só limita a altura com botão que no desenho está mesmo embaixo do
+      // grid; botão ao lado é empurrado depois.
+      const below = buttons
+        .filter((button) => button.y >= grid.y + grid.height)
+        .map((button) => toLine(button.y));
       const limit = below.length ? Math.min(...below) - line - 2 : Infinity;
 
       const height = Math.max(
@@ -686,6 +778,16 @@
         );
       }
 
+      const acoes = (Array.isArray(grid.columns) ? grid.columns : []).some((column) =>
+        CONTROL_COLUMN.test(flat(String(first(column?.title, column?.text, column?.label, ""))))
+      );
+
+      if (acoes) {
+        warnings.push(
+          'A coluna "Ações" virou coluna de marcação do grid. O menu por linha (TbCellClick + ^%CSW1MENUCLICK) precisa ser escrito à mão na rotina.'
+        );
+      }
+
       const location = index === 0 ? gridLocation : "parent";
       if (location !== "parent") {
         const tab = documentTabs.find((item) => item.id === location);
@@ -696,6 +798,7 @@
         location,
         gridCode: index === 0 ? 1 : 40 + index,
         gridLinePosition: line,
+        gridLinePositionAuto: false,
         gridHeight: height,
         gridLineStart: line,
         gridLineEnd: line + height - 1,
@@ -738,7 +841,12 @@
     // Manutenção entra na fila junto com os outros para a barra não ficar
     // com um buraco no lugar dela.
     const bar = buttons
-      .filter((button) => !consult.includes(button) && !inlineButtons.includes(button))
+      .filter(
+        (button) =>
+          !consult.includes(button) &&
+          !inlineButtons.includes(button) &&
+          button !== cancelButton
+      )
       .map((button, index) => ({
         index,
         text: button.text || `Botão ${index + 1}`,
@@ -766,7 +874,19 @@
       );
     }
 
-    if (!fields.some((field) => field.isKey)) {
+    const gridHasKey = documentGrids.some((grid) =>
+      grid.columns.some((column) => column.recordKey === true)
+    );
+
+    if (!fields.some((field) => field.isKey) && !gridHasKey) {
+      const codigo = fields.find((field) => /^(codigo|cod|code)$/.test(flat(field.description)));
+      if (codigo) {
+        codigo.isKey = true;
+        codigo.required = true;
+      }
+    }
+
+    if (!fields.some((field) => field.isKey) && !gridHasKey) {
       warnings.push("Nenhum campo veio marcado como chave — marque a chave antes de gerar a RG.");
     }
 

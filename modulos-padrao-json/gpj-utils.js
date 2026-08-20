@@ -206,16 +206,22 @@
     },
 
     normalizeVariable(value, fallback = "CAMPO") {
-      return (
-        removeAccents(value)
-          .replace(/[^a-zA-Z0-9%]/g, "")
-          .toUpperCase() || fallback
-      );
+      const clean = removeAccents(value)
+        .replace(/[^a-zA-Z0-9%]/g, "")
+        .toUpperCase();
+
+      if (!clean) return fallback;
+      // Variável do Caché não começa com dígito.
+      return /^[0-9]/.test(clean) ? `C${clean}` : clean;
     },
 
     normalizeParameter(value, fallback = "parametro") {
       const clean = removeAccents(value).replace(/[^a-zA-Z0-9]/g, "");
-      return clean ? clean.charAt(0).toLowerCase() + clean.slice(1) : fallback;
+      if (!clean) return fallback;
+
+      const parameter = clean.charAt(0).toLowerCase() + clean.slice(1);
+      // Parâmetro do Caché não começa com dígito.
+      return /^[0-9]/.test(parameter) ? `p${parameter}` : parameter;
     },
 
     toPascal(value) {
@@ -227,10 +233,12 @@
       const words = splitWords(value).filter((word) => !connectors.has(word));
       if (!words.length) return "campo";
 
-      return (
+      const parameter =
         (abbreviations[words[0]] || words[0]) +
-        words.slice(1).map(capitalize).join("")
-      );
+        words.slice(1).map(capitalize).join("");
+
+      // Parâmetro do Caché não começa com dígito.
+      return /^[0-9]/.test(parameter) ? `p${parameter}` : parameter;
     },
 
     escapeHtml(value) {

@@ -2843,6 +2843,17 @@
     return remaining.length ? `${match[1]}(${remaining.join(",")})` : match[1];
   }
 
+  function replaceSubscript(globalReference, subscript, replacement) {
+    const match = globalReference.match(/^([^(]+)\((.*)\)$/);
+    if (!match) return globalReference;
+
+    const items = match[2]
+      .split(",")
+      .map((item) => (item.trim() === subscript ? replacement : item));
+
+    return `${match[1]}(${items.join(",")})`;
+  }
+
   function appendSubscript(globalReference, subscript) {
     if (!subscript) return globalReference;
     if (globalReference.includes("(")) {
@@ -3022,8 +3033,23 @@
         "rotina"
       ])}${filterArgs})\t;`
     );
+    // Nome do laço livre de colisão com os parâmetros da assinatura.
+    const signatureNames = new Set([
+      ...persistentParameters,
+      ...cleanupParameters,
+      "rotina",
+      ...allFilterParams
+    ]);
+
+    let loopVariable = key ? key.parameter : workRecordName;
+    if (signatureNames.has(loopVariable)) {
+      let suffix = 2;
+      while (signatureNames.has(`${loopVariable}${suffix}`)) suffix += 1;
+      loopVariable = `${loopVariable}${suffix}`;
+    }
+
     lines.push("\t$$$VAR");
-    lines.push(`\tnew sc,${key ? key.parameter : workRecordName},${mtempVariable}`);
+    lines.push(`\tnew sc,${loopVariable},${mtempVariable}`);
     lines.push("\t;");
     lines.push("\tset sc=1");
     lines.push("\t;");
@@ -3032,11 +3058,16 @@
     lines.push("\t;");
 
     if (config.gridMaintenance && key) {
-      lines.push(`\tset ${key.parameter}=""`);
+      const loopNode =
+        loopVariable === key.parameter
+          ? persistentNode
+          : replaceSubscript(persistentNode, key.parameter, loopVariable);
+
+      lines.push(`\tset ${loopVariable}=""`);
       lines.push("\t;");
-      lines.push(`\tfor  set ${key.parameter}=$order(${persistentNode}) quit:${key.parameter}=""!$$$ISERR(sc)  do`);
-      lines.push(`\t. set ${mtempVariable}=$get(${persistentNode})`);
-      lines.push(`\t. set sc=$$GravarGlobalTrabalho(${joinCallArguments([...workContextParameters, key.parameter, mtempVariable])})`);
+      lines.push(`\tfor  set ${loopVariable}=$order(${loopNode}) quit:${loopVariable}=""!$$$ISERR(sc)  do`);
+      lines.push(`\t. set ${mtempVariable}=$get(${loopNode})`);
+      lines.push(`\t. set sc=$$GravarGlobalTrabalho(${joinCallArguments([...workContextParameters, loopVariable, mtempVariable])})`);
       lines.push("\t. quit:$$$ISERR(sc)");
     } else {
       lines.push("\t; TODO: percorrer a origem dos dados, montar a variável da global de trabalho");
