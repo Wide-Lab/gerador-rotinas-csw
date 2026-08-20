@@ -385,3 +385,18 @@ Detalhes que precisaram de regra própria:
   alinhamento automático empilharia tudo numa coluna só.
 - **Duas grids na mesma aba** não cabem numa rotina de aba: fica a primeira e o importador
   avisa que a outra precisa de uma aba separada.
+
+## Colar um recorte do arquivo
+
+Copiar um pedaço do arquivo do desenhador traz as telas separadas por vírgula, sem os
+colchetes de fora e às vezes com uma chave sobrando no fim:
+
+```
+{ "id": "WDWDNEW02", ... },
+{ "id": "WDWDNEW03", ... },
+}
+```
+
+Isso não é JSON válido e o painel só respondia "JSON inválido". Agora ele varre o texto e
+recolhe os objetos completos do primeiro nível, ignorando o que estiver solto em volta —
+colar o arquivo inteiro ou só o trecho das telas dá no mesmo.

@@ -1309,13 +1309,70 @@
     };
   }
 
+  // Percorre o texto e devolve cada objeto { ... } completo do primeiro
+  // nível, ignorando o que estiver solto em volta.
+  function topLevelObjects(text) {
+    const objects = [];
+    let depth = 0;
+    let start = -1;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+      const character = text[index];
+
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+
+      if (character === '"') {
+        inString = true;
+      } else if (character === "{") {
+        if (depth === 0) start = index;
+        depth += 1;
+      } else if (character === "}") {
+        depth = Math.max(0, depth - 1);
+        if (depth === 0 && start >= 0) {
+          objects.push(text.slice(start, index + 1));
+          start = -1;
+        }
+      }
+    }
+
+    return objects;
+  }
+
+  function parseDesignerJson(text) {
+    const raw = String(text || "").trim();
+
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      const screens = topLevelObjects(raw)
+        .map((piece) => {
+          try {
+            return JSON.parse(piece);
+          } catch (ignored) {
+            return null;
+          }
+        })
+        .filter((item) => item && Array.isArray(item.components));
+
+      if (screens.length) return screens;
+      throw error;
+    }
+  }
+
   function renderPreview() {
     let parsed = null;
 
     try {
-      parsed = JSON.parse(textarea.value);
+      parsed = parseDesignerJson(textarea.value);
     } catch (error) {
-      previewBox.innerHTML = `<div style="padding:22px;text-align:center;opacity:.7;font-size:13px">JSON inválido: ${app.utils.escapeHtml(error.message)}</div>`;
+      previewBox.innerHTML = `<div style="padding:22px;text-align:center;opacity:.7;font-size:13px">JSON inválido: ${app.utils.escapeHtml(error.message)}<br><br>Cole o arquivo inteiro ou as telas separadas por vírgula — os colchetes de fora não fazem falta.</div>`;
       statusLabel.textContent = "Cole o JSON do desenhador.";
       lastResult = null;
       return;
@@ -1523,7 +1580,8 @@
     });
   }
 
-  app.designerImport = { convert, open, close, install, EXAMPLE };
+  app.designerImport = {
+    parseDesignerJson, convert, open, close, install, EXAMPLE };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", install, { once: true });
