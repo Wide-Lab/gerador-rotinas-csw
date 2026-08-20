@@ -128,6 +128,8 @@
       ),
       rows: first(raw.gridData?.data, raw.data, raw.rows, raw.linhas),
       options: first(raw.options, raw.opcoes, raw.items, raw.itens, raw.values),
+      // Abas que apontam para outras telas do arquivo.
+      tabs: first(raw.tabs, raw.abas, raw.paginas),
       hasLookup: String(first(raw.f7, raw.F7, "") || "").trim() !== ""
     };
   }
@@ -338,7 +340,7 @@
   }
 
   // Empurra os elementos de cada linha para a direita até não colidirem.
-  function reflowFields(fields, columns) {
+  function reflowFields(fields, columns, limit = columns) {
     const byLine = new Map();
 
     fields.forEach((field) => {
@@ -358,6 +360,12 @@
           field.labelColumn + field.labelSize + 1
         );
 
+        // Leitor que passa do limite (largura da janela ou do TabPanel)
+        // encolhe até caber.
+        if (field.inputColumn + field.inputSize - 1 > limit) {
+          field.inputSize = Math.max(4, limit - field.inputColumn + 1);
+        }
+
         cursor = field.inputColumn + field.inputSize + 1;
 
         if (field.hasDisplay) {
@@ -366,8 +374,8 @@
         }
 
         // Sobrou pouco espaço até o fim da janela: encolhe o display.
-        if (field.hasDisplay && field.displayColumn + field.displaySize - 1 > columns) {
-          field.displaySize = Math.max(4, columns - field.displayColumn + 1);
+        if (field.hasDisplay && field.displayColumn + field.displaySize - 1 > limit) {
+          field.displaySize = Math.max(4, limit - field.displayColumn + 1);
           cursor = field.displayColumn + field.displaySize + 1;
         }
       });
@@ -378,6 +386,12 @@
 
   // Botões que o próprio btnManut desenha.
   const MAINTENANCE_PATTERN = /^(incluir|inserir|novo|manuten[çc][ãa]o|remover)$/i;
+
+  // "+ Incluir" é o mesmo "Incluir"; o "+" é só enfeite do desenho.
+  function buttonLabel(text) {
+    const clean = String(text || "").replace(/^\s*\+\s*/, "").trim();
+    return clean || String(text || "").trim();
+  }
 
   // Barra Confirmar/Cancelar do cadastro (btnManter).
   const SAVE_PATTERN = /^(confirmar|gravar|salvar)$/i;
@@ -463,6 +477,192 @@
     const helpers = helpersFor();
     const used = new Set();
 
+    // Abas do desenhador apontando para outras telas do arquivo.
+    function linkedTabsFrom(list) {
+      const strip = list.find(
+        (item) =>
+          (item.kind === "tabstrip" || item.kind === "tab") &&
+          Array.isArray(item.tabs) &&
+          item.tabs.length
+      );
+
+      if (!strip) return [];
+
+      return strip.tabs
+        .map((tab, index) => {
+          const title = String(
+            first(tab?.name, tab?.title, tab?.text, `Aba ${index + 1}`)
+          ).trim();
+          const routine = String(first(tab?.routine, tab?.rotina, tab?.tela, "") || "").trim();
+
+          return {
+            title,
+            routine,
+            target: screens.findIndex((item) => String(item.id || "") === routine)
+          };
+        })
+        .filter((tab) => tab.title);
+    }
+
+    function convertLinkedTabs(linked) {
+      const parentName = app.utils.normalizeVariable(
+        first(options.routineName, screen.id, screen.name, "ROTINANOVA"),
+        "ROTINANOVA"
+      );
+      const parentTitle = String(
+        first(options.title, screen.name, screen.title, "Tela importada")
+      );
+
+      const panelWidth = Math.max(40, columns - 2);
+      const documentTabs = [];
+      const allFields = [];
+      const allGrids = [];
+      const allButtons = [];
+      const notes = [];
+
+      linked.forEach((tab, index) => {
+        const id = `aba${index + 1}`;
+        const fallbackName = `${parentName}TAB${index + 1}`;
+        const routineName = app.utils
+          .normalizeVariable(tab.routine || fallbackName, fallbackName)
+          .slice(0, 31);
+
+        let sub = null;
+
+        if (tab.target >= 0) {
+          sub = convert(input, {
+            ...options,
+            screen: tab.target,
+            routineName,
+            title: tab.title,
+            nested: true
+          });
+        } else {
+          notes.push(
+            `A aba "${tab.title}" aponta para a tela ${tab.routine || "(sem rotina)"}, que não está neste JSON. Ela entrou vazia.`
+          );
+        }
+
+        const subGrids = sub ? sub.grids : [];
+        if (subGrids.length > 1) {
+          notes.push(
+            `A aba "${tab.title}" tem ${subGrids.length} grids no desenho, mas uma rotina de aba comporta um só. Ficou o primeiro; o outro precisa de uma aba separada.`
+          );
+        }
+
+        const grid = subGrids[0] || null;
+
+        documentTabs.push({
+          id,
+          title: tab.title,
+          routineName,
+          gridRgRoutineName: `${routineName}RG`.slice(0, 31),
+          dataVariable: routineName.slice(0, 20),
+          globalSubscript: String(index + 4),
+          contentType: grid ? "grid" : "fields",
+          // O desenho já diz onde cada campo fica; o alinhamento automático
+          // empilharia tudo numa coluna só.
+          autoFieldLayout: false
+        });
+
+        const tabFields = (sub ? sub.fields : []).map((field) => ({ ...field, tabId: id }));
+        // O conteúdo da aba vive dentro do TabPanel, que é mais estreito que
+        // a janela.
+        reflowFields(tabFields, panelWidth, panelWidth);
+        tabFields.forEach((field) => allFields.push(field));
+
+        if (grid) {
+          allGrids.push({
+            ...grid,
+            location: id,
+            gridCode: (index + 1) * 10 + 1,
+            gridWorkGlobal: `mtemp${routineName}`.slice(0, 31),
+            gridCheckGlobal: `mtemp${routineName}CHECK`.slice(0, 31)
+          });
+        }
+
+        (sub ? sub.buttons : []).forEach((button) => {
+          allButtons.push({ ...button, location: id });
+        });
+
+        (sub ? sub.warnings : []).forEach((note) => notes.push(`${tab.title}: ${note}`));
+      });
+
+      // Botões da tela de fora: Salvar, Salvar e Criar Outro e Cancelar são a
+      // barra do btnManter da rotina pai.
+      const parentButtons = components.filter((item) => item.kind === "button");
+      const save = parentButtons.find((button) => SAVE_PATTERN.test(buttonLabel(button.text)));
+      const another = parentButtons.find((button) => /criar outro/i.test(button.text));
+      const cancel = parentButtons.find((button) => CANCEL_PATTERN.test(buttonLabel(button.text)));
+      const barButtons = parentButtons.filter(
+        (button) => button !== save && button !== another && button !== cancel
+      );
+
+      const bar = barButtons.map((button, index) => ({
+        index,
+        text: buttonLabel(button.text) || `Botão ${index + 1}`,
+        line: toLine(button.y),
+        column: toColumn(button.x),
+        size: Math.max(8, toSize(button.width))
+      }));
+
+      alignButtonBar(bar, columns);
+
+      return {
+        routine: {
+          name: parentName,
+          title: parentTitle,
+          mode: "crud",
+          dataVariable: parentName.slice(0, 8),
+          useTabs: true,
+          useRules: true,
+          useBtnManter: Boolean(save),
+          generateSaveAnother: Boolean(another),
+          generateDelete: false,
+          btnManterLine: save ? toLine(save.y) : undefined,
+          btnManterColumn: save ? toColumn(save.x) : undefined,
+          btnManterLocation: "parent",
+          rgRoutineName: `${parentName}RG`,
+          entityName: parentTitle,
+          globalName: parentName,
+          tabPanelColumn: 2,
+          tabPanelWidth: panelWidth,
+          width: columns
+        },
+        tabs: documentTabs,
+        fields: allFields,
+        grids: allGrids,
+        buttons: [
+          ...allButtons,
+          ...bar.map((entry) => ({
+            location: "parent",
+            text: entry.text,
+            positionMode: "manual",
+            line: entry.line,
+            column: entry.column,
+            size: entry.size,
+            buttonId: `bt${app.utils
+              .normalizeVariable(entry.text, `BOTAO${entry.index + 1}`)
+              .slice(0, 18)}`,
+            actionLabel: String(6000 + entry.index * 100),
+            returnLabel: `${6000 + entry.index * 100}EX`
+          }))
+        ],
+        indexes: [],
+        warnings: [...warnings, ...notes],
+        screens: screens.map((item, index) => ({
+          index,
+          id: item.id || `tela${index}`,
+          name: item.name || item.title || `Tela ${index + 1}`,
+          components: (item.components || []).length
+        })),
+        calibration: { cellWidth, cellHeight, columns, estimated }
+      };
+    }
+
+    const linkedTabs = options.nested ? [] : linkedTabsFrom(components);
+    if (linkedTabs.length) return convertLinkedTabs(linkedTabs);
+
     const unknown = new Map();
     components
       .filter((item) => !item.kind)
@@ -478,34 +678,42 @@
     const tabStrips = components.filter((item) => item.kind === "tabstrip" || item.kind === "tab");
 
     // O label de um leitor é o texto mais próximo à esquerda, na mesma linha.
+    // Só o dono do label se ancora nele; quem herdou o nome se ancora no
+    // próprio leitor, senão os dois brigam pela mesma coluna.
     function labelSourceFor(input) {
-      const sameLine = labels.filter(
-        (label) =>
-          Math.abs(label.y - input.y) <= cellHeight * 0.8 &&
-          label.right <= input.right &&
-          label.right <= input.x + cellWidth * 2 &&
-          label.text &&
-          !PLACEHOLDER.test(label.text)
-      );
-
-      return sameLine.sort((a, b) => b.right - a.right)[0] || null;
+      return labelOwner.get(input) || null;
     }
 
     function labelFor(input) {
-      const sameLine = labels.filter(
-        (label) =>
-          Math.abs(label.y - input.y) <= cellHeight * 0.8 &&
-          label.x < input.x &&
-          label.right <= input.right &&
-          label.text &&
-          !PLACEHOLDER.test(label.text)
+      const owned = labelOwner.get(input);
+      if (owned) return owned.text;
+
+      // Sem label próprio, o texto do componente vira o nome — é o caso do
+      // checkbox e do radio, que carregam o texto dentro.
+      const own = input.text && !PLACEHOLDER.test(input.text) ? input.text : "";
+      if (own) return own;
+
+      // Label da linha já pertence a outro leitor: o segundo campo herda o
+      // nome com um número, para não sair repetido na tela.
+      const shared = labels
+        .filter(
+          (label) =>
+            Math.abs(label.y - input.y) <= cellHeight * 0.8 &&
+            label.x < input.x &&
+            label.text &&
+            !PLACEHOLDER.test(label.text)
+        )
+        .sort((a, b) => b.right - a.right)[0];
+
+      if (!shared) return "";
+
+      const order = (sharedLabels.get(shared) || 1) + 1;
+      sharedLabels.set(shared, order);
+      warnings.push(
+        `Dois leitores dividem o label "${shared.text}" na mesma linha; o segundo ficou como "${shared.text} ${order}". Renomeie se a tela pedir outro nome.`
       );
 
-      if (sameLine.length) return sameLine.sort((a, b) => b.right - a.right)[0].text;
-
-      // Sem label ao lado, o texto do próprio componente vira o nome — é o
-      // caso do checkbox e do radio, que carregam o texto dentro.
-      return input.text && !PLACEHOLDER.test(input.text) ? input.text : "";
+      return `${shared.text} ${order}`;
     }
 
     // O que sobra dentro do leitor depois de achar o label é um valor de
@@ -556,12 +764,7 @@
     }
 
     function displayFor(input) {
-      const candidates = displays.filter(
-        (display) =>
-          Math.abs(display.y - input.y) <= cellHeight * 0.8 && display.x >= input.right - cellWidth
-      );
-      if (!candidates.length) return null;
-      return candidates.sort((a, b) => a.x - b.x)[0];
+      return displayOwner.get(input) || null;
     }
 
     const kindToType = {
@@ -608,6 +811,45 @@
       );
     });
 
+    // Um display pertence ao leitor imediatamente à esquerda dele.
+    const displayOwner = new Map();
+
+    [...displays]
+      .sort((a, b) => a.x - b.x)
+      .forEach((display) => {
+        const owner = inputs
+          .filter(
+            (input) =>
+              Math.abs(input.y - display.y) <= cellHeight * 0.8 &&
+              input.right <= display.x + cellWidth
+          )
+          .sort((a, b) => b.right - a.right)
+          .find((input) => !displayOwner.has(input));
+
+        if (owner) displayOwner.set(owner, display);
+      });
+
+    // Um label pertence ao leitor mais próximo à direita, na mesma linha.
+    const labelOwner = new Map();
+    const sharedLabels = new Map();
+
+    labels
+      .filter((label) => label.text && !PLACEHOLDER.test(label.text))
+      .sort((a, b) => a.right - b.right)
+      .forEach((label) => {
+        const owner = inputs
+          .concat(displayOnly)
+          .filter(
+            (item) =>
+              Math.abs(item.y - label.y) <= cellHeight * 0.8 &&
+              item.x >= label.right - cellWidth
+          )
+          .sort((a, b) => a.x - b.x)
+          .find((item) => !labelOwner.has(item));
+
+        if (owner) labelOwner.set(owner, label);
+      });
+
     const fields = inputs.concat(displayOnly).map((input, position) => {
       const isDisplayOnly = displayOnly.includes(input);
       const description = labelFor(input) || `Campo ${position + 1}`;
@@ -633,13 +875,20 @@
       const labelColumn = Math.max(1, Math.min(rightEdge - wanted, inputColumn - 3));
       const labelSize = Math.max(2, Math.min(wanted, inputColumn - 2 - labelColumn));
 
-      const lookup = helpers.inferLookup(description) || (input.hasLookup ? "custom" : "none");
+      const lookup = ["combo", "radio", "checkbox", "textArea", "multiSelect"].includes(type)
+        ? "none"
+        : helpers.inferLookup(description) || (input.hasLookup ? "custom" : "none");
+
+      // Campo com F7 de catálogo mostra a descrição ao lado; o Valcp do
+      // preset grava justamente nesse display.
+      const needsDisplay = lookup !== "none" && lookup !== "custom";
 
       const field = {
         description,
-        variable: LOOKUP_VARIABLES[lookup]
-          ? (used.add(LOOKUP_VARIABLES[lookup]), LOOKUP_VARIABLES[lookup])
-          : helpers.variableFromDescription(description, used),
+        variable:
+          LOOKUP_VARIABLES[lookup] && !used.has(LOOKUP_VARIABLES[lookup])
+            ? (used.add(LOOKUP_VARIABLES[lookup]), LOOKUP_VARIABLES[lookup])
+            : helpers.variableFromDescription(description, used),
         type,
         tabId: "parent",
         isKey: input.key === true,
@@ -652,7 +901,7 @@
         inputSize: isDisplayOnly
           ? 8
           : LOOKUP_SIZES[lookup] || sizeFor(type, input, description),
-        hasDisplay: Boolean(display) && !["date", "textArea"].includes(type),
+        hasDisplay: (Boolean(display) || needsDisplay) && !["date", "textArea"].includes(type),
         displayLine: line,
         displayColumn: display ? toColumn(display.x) : inputColumn + toSize(input.width) + 2,
         displaySize: display ? Math.max(10, toSize(display.width)) : 30,
@@ -736,7 +985,7 @@
     // Incluir + Manutenção + Remover no desenho: é a manutenção em linha do
     // grid. O btnManut cobre os três, então eles saem da lista de botões.
     const inlineButtons = grids.length
-      ? buttons.filter((button) => MAINTENANCE_PATTERN.test(button.text.trim()))
+      ? buttons.filter((button) => MAINTENANCE_PATTERN.test(buttonLabel(button.text)))
       : [];
     const hasInlineMaintenance = inlineButtons.length >= 2;
     const consult = buttons.filter((button) => CONSULT_PATTERN.test(button.text.trim()));
@@ -886,7 +1135,8 @@
       }
     }
 
-    if (!fields.some((field) => field.isKey) && !gridHasKey) {
+    // Numa aba a chave é da rotina pai, não do conteúdo da aba.
+    if (!options.nested && !fields.some((field) => field.isKey) && !gridHasKey) {
       warnings.push("Nenhum campo veio marcado como chave — marque a chave antes de gerar a RG.");
     }
 

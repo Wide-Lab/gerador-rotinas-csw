@@ -151,7 +151,14 @@
       useBtnManter: booleanValue(routine.useBtnManter, current.useBtnManter),
       btnManterLine: numberValue(routine.btnManterLine, current.btnManterLine),
       btnManterColumn: numberValue(routine.btnManterColumn, current.btnManterColumn),
-      btnManterLocation: routine.btnManterLocation || current.btnManterLocation
+      btnManterLocation: routine.btnManterLocation || current.btnManterLocation,
+      generateSaveAnother: booleanValue(
+        routine.generateSaveAnother,
+        current.generateSaveAnother
+      ),
+      generateDelete: booleanValue(routine.generateDelete, current.generateDelete),
+      tabPanelWidth: numberValue(routine.tabPanelWidth, current.tabPanelWidth),
+      tabPanelColumn: numberValue(routine.tabPanelColumn, current.tabPanelColumn)
     };
   }
 

@@ -336,3 +336,52 @@ importador avisa que, se a tela é um cadastro, o caminho é trocar o modo para 
 do laço do `GerarGlobalTrabalho` não repete um parâmetro da assinatura: um filtro "Código"
 e a coluna chave "Codigo" davam os dois em `cod`, e o `new sc,cod` apagava o filtro que
 tinha acabado de chegar. Agora o laço usa `cod2`.
+
+## Desenho com abas apontando para outras telas
+
+O componente de abas do desenhador não guarda o conteúdo: ele lista as abas e o nome da
+rotina de cada uma, e o conteúdo mora em outras telas do mesmo arquivo.
+
+```json
+{ "id": "Tabs", "tabs": [
+  { "name": "Dados Gerais", "routine": "WDWDNEW03" },
+  { "name": "Dados Pedido", "routine": "WDWDNEW04" }
+]}
+```
+
+Antes o importador convertia só a primeira tela e o desenho inteiro se perdia — a tela de
+fora só tem o componente de abas e os botões, então saía um projeto vazio. Agora ele segue
+os ponteiros: cada aba é convertida a partir da tela que ela aponta e entra como aba da
+rotina pai, com o nome de rotina que está no JSON.
+
+Do desenho `WDWDNEW02` (Cadastro de Sequência de Cálculo) saem cinco rotinas:
+
+```
+WDWDNEW02    rotina pai, 4 abas, btnManter Salvar / Salvar e Criar Outro / Cancelar
+WDWDNEW03    Dados Gerais       campos + grid (Produto, Descrição Produto)
+WDWDNEW04    Dados Pedido       campos
+WDWDNEW05    Dados Estoque      multi-seleção
+WDWDNEW06    Dados Programação  campos + grid
+```
+
+Detalhes que precisaram de regra própria:
+
+- **Salvar / Salvar e Criar Outro / Cancelar** na tela de fora viram a barra do btnManter
+  da rotina pai (`btSalvar`, `btSalvarNovo`, `btCancelar`). O "Salvar e Criar Outro" liga
+  a opção correspondente; sem ele o botão não é gerado.
+- **"+ Incluir" é "Incluir"**: o `+` do desenho não conta para reconhecer a manutenção em
+  linha do grid.
+- **Um label pertence a um leitor só.** Uma linha com `Tipo de Nota [combo] [leitor]
+  [display]` fazia os dois leitores pegarem o mesmo label e o mesmo display: label, leitor
+  e display saíam sobrepostos e um dos campos ia parar na coluna 110. Agora o label vai
+  para o leitor mais próximo à direita, o display para o leitor mais próximo à esquerda, e
+  o campo que herdou o nome ganha um número (`Tipo de Nota 2`) com um aviso na conversão.
+- **Combo, radio e check não recebem preset de F7.** O Valcp do preset escreve na descrição
+  ao lado, e esses componentes não têm display. Leitor com F7 de catálogo, ao contrário,
+  passou a ganhar o display mesmo quando o desenho não desenhou um.
+- **A aba é mais estreita que a janela.** O conteúdo é reposicionado dentro da largura do
+  TabPanel (`janela - 2`), e o leitor que não cabe encolhe — antes só o display encolhia.
+  A aba importada também guarda as posições do desenho (`autoFieldLayout: false`); o
+  alinhamento automático empilharia tudo numa coluna só.
+- **Duas grids na mesma aba** não cabem numa rotina de aba: fica a primeira e o importador
+  avisa que a outra precisa de uma aba separada.
