@@ -201,3 +201,45 @@ parâmetro for trocado no painel de índices, a RG acompanha.
 Duas regras do validador foram ajustadas junto: a coluna chave não precisa mais de *piece*
 da global de trabalho (ela é o subscrito, não um pedaço do registro) e o aviso de "campo
 usado como chave mas não marcado como chave" não vale para colunas de grid.
+
+## Correção — `<UNDEFINED>` na global do pai com abas
+
+A coluna de grid marcada como chave entra nos índices da global — mas isso só vale para o
+grid da **tela principal**. Estava valendo também para grid de aba, e aí a global do pai
+saía assim:
+
+```objectscript
+UnLockCadastroSequenciaCalculo(codEmpresa)	;
+	do $$$DoLock("-","^WDWDNEW02(codEmpresa,produto,empresa)")
+```
+
+`produto` e `empresa` são as colunas chave dos grids das abas *Dados Gerais* e *Dados
+Programação*. Elas não são parâmetro da rotina pai (chegam pela linha do grid da aba),
+então a assinatura tinha só `codEmpresa` e o Caché estourava
+`<UNDEFINED>GetRegistroConv+24^%CSINTEGRA *produto` já no primeiro Show.
+
+O mesmo vazamento contaminava as RGs das abas, cada uma carregando a chave da outra:
+
+```objectscript
+; antes
+do $$$KillMergeG(^WDWDNEW02(codEmpresa,empresa,4),^mtempWDWDNEW03(term))   ; aba 1
+do $$$KillMergeG(^WDWDNEW02(codEmpresa,produto,7),^mtempWDWDNEW06(term))   ; aba 4
+
+; agora
+do $$$KillMergeG(^WDWDNEW02(codEmpresa,4),^mtempWDWDNEW03(term))
+do $$$KillMergeG(^WDWDNEW02(codEmpresa,7),^mtempWDWDNEW06(term))
+```
+
+A chave do grid de aba continua funcionando onde ela vale — dentro da RG da aba:
+
+```objectscript
+for  set produto=$order(^WDWDNEW02(codEmpresa,4,produto)) quit:produto=""!$$$ISERR(sc)  do
+```
+
+Junto foi corrigido o id repetido de botão: dois "Remover Todos" na mesma tela viravam o
+mesmo `btREMOVERTODOS`, e o CSW ligava os dois no mesmo controle. Agora o segundo vira
+`btREMOVERTODOS2`.
+
+Efeito colateral esperado: telas que não têm campo chave nenhum passaram a acusar
+"Nenhuma chave foi definida nos índices da global" — antes a chave do grid de aba
+mascarava o problema.

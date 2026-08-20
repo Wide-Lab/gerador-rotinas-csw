@@ -424,6 +424,27 @@
     tabelaPreco: "CODTABPRE"
   };
 
+  // Dois botões com o mesmo texto não podem dividir o id do controle.
+  function buttonIdFactory() {
+    const used = new Set();
+
+    return (text, index) => {
+      const base = `bt${app.utils
+        .normalizeVariable(text, `BOTAO${index + 1}`)
+        .slice(0, 18)}`;
+
+      let candidate = base;
+      let suffix = 2;
+      while (used.has(candidate)) {
+        candidate = `${base.slice(0, 18)}${suffix}`;
+        suffix += 1;
+      }
+
+      used.add(candidate);
+      return candidate;
+    };
+  }
+
   function helpersFor() {
     return (
       (app.specImport && app.specImport.helpers) || {
@@ -476,6 +497,7 @@
 
     const helpers = helpersFor();
     const used = new Set();
+    const uniqueButtonId = buttonIdFactory();
 
     // Abas do desenhador apontando para outras telas do arquivo.
     function linkedTabsFrom(list) {
@@ -588,6 +610,12 @@
         (sub ? sub.warnings : []).forEach((note) => notes.push(`${tab.title}: ${note}`));
       });
 
+      if (!allFields.some((field) => field.isKey)) {
+        notes.push(
+          "A tela de fora só tem as abas e os botões, então nenhum campo veio como chave. Marque a chave nos Índices gerais da global antes de gerar a RG."
+        );
+      }
+
       // Botões da tela de fora: Salvar, Salvar e Criar Outro e Cancelar são a
       // barra do btnManter da rotina pai.
       const parentButtons = components.filter((item) => item.kind === "button");
@@ -641,9 +669,7 @@
             line: entry.line,
             column: entry.column,
             size: entry.size,
-            buttonId: `bt${app.utils
-              .normalizeVariable(entry.text, `BOTAO${entry.index + 1}`)
-              .slice(0, 18)}`,
+            buttonId: uniqueButtonId(entry.text, entry.index),
             actionLabel: String(6000 + entry.index * 100),
             returnLabel: `${6000 + entry.index * 100}EX`
           }))
@@ -1174,9 +1200,7 @@
         line: entry.line,
         column: entry.column,
         size: entry.size,
-        buttonId: `bt${app.utils
-          .normalizeVariable(entry.text, `BOTAO${entry.index + 1}`)
-          .slice(0, 18)}`,
+        buttonId: uniqueButtonId(entry.text, entry.index),
         // Um label por botão; sem isso todos caem no mesmo 6000.
         actionLabel: String(6000 + entry.index * 100),
         returnLabel: String(6000 + entry.index * 100) + "EX"

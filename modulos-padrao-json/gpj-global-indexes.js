@@ -25,9 +25,12 @@
     };
 
     collect(state.parentGrid ? state.parentGrid.columns : null, "Grid");
-    state.tabs.forEach((tab) => collect(tab.grid ? tab.grid.columns : null, `Grid ${tab.title}`));
-    // O grid em edição ainda pode não ter sido gravado na definição.
-    collect(state.gridColumns, "Grid");
+
+    // O grid da tela principal em edição ainda pode não ter sido gravado na
+    // definição. Grid de aba fica de fora: a chave dele é da RG da aba.
+    if ((state.activeGridLocation || "parent") === "parent") {
+      collect(state.gridColumns, "Grid");
+    }
 
     return definitions;
   }
