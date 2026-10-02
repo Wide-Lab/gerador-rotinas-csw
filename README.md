@@ -12,10 +12,10 @@ e os F7 no padrão das customizações, com validador de regras CSW.
 ## Usar pelo Claude Code
 
 A skill fica no plugin **gerador-rotinas-csw** do marketplace interno
-[widelab-plugins](https://github.com/medeiros-ts/widelab-plugins):
+[widelab-plugins](https://github.com/Wide-Lab/widelab-plugins):
 
 ```
-claude plugin marketplace add medeiros-ts/widelab-plugins
+claude plugin marketplace add Wide-Lab/widelab-plugins
 claude plugin install gerador-rotinas-csw@widelab
 ```
 
