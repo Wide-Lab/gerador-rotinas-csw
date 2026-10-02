@@ -118,20 +118,9 @@ Sai limpo no validador: 158 linhas de `.mac` e 94 de RG.
 > grid* e não em *Cadastro*: no modo Grid o label `3000` é o foco do grid, não a gravação.
 > Cadastro que precisa de grid junto põe o grid numa aba.
 
-## Gerar rotinas pelo Claude Code (skill `gerar-rotina-cache`)
+## Gerar rotinas pelo Claude Code
 
-O `cli/` roda o gerador sem navegador (ver [cli/LEIA-ME-CLI.md](cli/LEIA-ME-CLI.md)), e a
-skill em `skill/gerar-rotina-cache/` ensina o Claude Code a usar o gerador: ler o documento
-da tela, montar o projeto, validar, gravar o `.mac`, compilar no DESENV e regerar a interface.
-
-Instalação:
-
-1. Clone este repositório e rode `npm install` dentro de `cli/`.
-2. Crie a variável de ambiente `GERADOR_ROTINAS` com o caminho do clone
-   (ex.: `setx GERADOR_ROTINAS "C:\workspacecsw\gerador-rotinas-csw"`).
-3. Copie `skill/gerar-rotina-cache` para `%USERPROFILE%\.claude\skills\gerar-rotina-cache`.
-4. No Claude Code, peça a tela normalmente ("cria a tela de cadastro de X", ou cole o
-   documento). Os exemplos em `cli/exemplo-*.json` cobrem cadastro, consulta, abas, grid de
-   manutenção, colunas por mês e impressão de etiquetas.
-
-Antes de mudar o gerador, rode `npm run teste` em `cli/`.
+O `cli/` roda o gerador sem navegador (ver [cli/LEIA-ME-CLI.md](cli/LEIA-ME-CLI.md)). A
+skill que ensina o Claude Code a usar o gerador está no plugin `gerador-rotinas-csw`;
+a instalação está no [README](README.md). Antes de mudar o gerador, rode `npm run teste`
+em `cli/`.

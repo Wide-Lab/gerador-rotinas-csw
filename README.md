@@ -6,20 +6,22 @@ e os F7 no padrão das customizações, com validador de regras CSW.
 
 - **Tela:** abra `gerador-json-ui-ajustada.html` no navegador (detalhes em [LEIA-ME.md](LEIA-ME.md)).
 - **Linha de comando:** `cli/gerar-rotina.mjs` (detalhes em [cli/LEIA-ME-CLI.md](cli/LEIA-ME-CLI.md)).
-- **Claude Code:** a skill `gerar-rotina-cache` usa o gerador para montar a tela a partir
+- **Claude Code:** o plugin `gerador-rotinas-csw` usa o gerador para montar a tela a partir
   do documento, validar, gravar, compilar no DESENV e regerar a interface.
 
-## Instalar a skill no Claude Code
+## Usar pelo Claude Code
 
-1. Clone o repositório e rode `npm install` dentro de `cli/`.
-2. Defina a variável `GERADOR_ROTINAS` com o caminho do clone:
-   `setx GERADOR_ROTINAS "C:\caminho\gerador-rotinas-csw"`
-3. Copie a pasta `skill/gerar-rotina-cache` para `%USERPROFILE%\.claude\skills\`.
-4. Abra o Claude Code na pasta do DESENV e peça a tela ("cria a tela de cadastro de X" ou
-   cole o documento da tarefa).
+A skill fica no plugin **gerador-rotinas-csw** do marketplace interno
+[widelab-plugins](https://github.com/medeiros-ts/widelab-plugins):
 
-Recomendado junto: o plugin **cache-consistem** (padrões das rotinas e busca nos fontes do
-ERP) e o plugin **consistem** (massa de dados em base versionada, `gerar-dados-base`).
+```
+claude plugin marketplace add medeiros-ts/widelab-plugins
+claude plugin install gerador-rotinas-csw@widelab
+```
+
+Na primeira vez, a skill pergunta onde está este repositório (ou clona) e pede para
+definir `GERADOR_ROTINAS` com o caminho. Depois é só pedir a tela no Claude Code, na
+pasta do DESENV ("cria a tela de cadastro de X" ou cole o documento da tarefa).
 
 ## Exemplos
 
