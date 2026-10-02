@@ -1,0 +1,223 @@
+{
+  "routine": {
+    "name": "WDOMTESTEPV100C",
+    "title": "Configuração de Geração de Pedido de Representante",
+    "mode": "crud",
+    "useTabs": true,
+    "useRules": true,
+    "rgRoutineName": "WDOMTESTEPV100CRG",
+    "entityName": "CfgPedidoRepresentante",
+    "globalName": "WDOMTESTEPVPDCFG",
+    "dataVariable": "WDOMTESTEPVPDCFG",
+    "useRoutineCompany": true,
+    "useBtnManter": true,
+    "btnManterLocation": "ger",
+    "btnManterLine": 17,
+    "generateSaveAnother": false,
+    "generateDelete": false,
+    "width": 108,
+    "height": 28
+  },
+  "tabs": [
+    {
+      "id": "ger",
+      "title": "Geral",
+      "routineName": "WDOMTESTEPV100CTAB1",
+      "dataVariable": "WDOMTESTEPVPDCFG1",
+      "globalSubscript": "1",
+      "contentType": "fields",
+      "autoFieldLayout": false
+    },
+    {
+      "id": "usu",
+      "title": "Usuário",
+      "routineName": "WDOMTESTEPV100CTAB2",
+      "gridRgRoutineName": "WDOMTESTEPV100CTAB2RG",
+      "globalSubscript": "2",
+      "contentType": "grid",
+      "hooks": {
+        "extraMethods": "; Nome do usuário Consistem\n;\n; set nome=$$NomeUsuario^WDOMTESTEPV100CTAB2RG(codUsuario)\nNomeUsuario(codUsuario)\t;\n$$$VAR\n;\nnew sc,csmenop,senha\n;\nif $get(codUsuario)=\"\" quit \"\"\nset sc=$$VerOperador^%CSUTICSP(codUsuario,.csmenop,.senha)\nif $$$ISERR(sc) quit \"\"\n;\nquit $piece(csmenop,Z,1)\n;\n; Nome do representante\n;\n; set nome=$$NomeRepresentante^WDOMTESTEPV100CTAB2RG(codEmpresa,codRepresentante)\nNomeRepresentante(codEmpresa,codRepresentante)\t;\n$$$VAR\nnew sc,ftre\n;\nif $get(codRepresentante)=\"\" quit \"\"\nset sc=$$VerRepresentante^CCFTRG001(codEmpresa,codRepresentante,.ftre)\nif $$$ISERR(sc) quit \"\"\n;\nquit $piece(ftre,Z,1)"
+      }
+    }
+  ],
+  "fields": [
+    {
+      "id": "est",
+      "description": "Exibir os produtos disponíveis em estoque",
+      "variable": "EXIEST",
+      "type": "combo",
+      "tabId": "ger",
+      "required": true,
+      "piece": 3,
+      "inputSize": 6,
+      "optionsVariable": "TABSIMNAO",
+      "createOptionsTable": true,
+      "optionsItems": [
+        {
+          "value": "S",
+          "description": "Sim"
+        },
+        {
+          "value": "N",
+          "description": "Não"
+        }
+      ],
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 20,
+      "inputColumn": 22,
+      "inputLine": 1
+    },
+    {
+      "id": "loc",
+      "description": "Estoque",
+      "variable": "CODEST",
+      "type": "multiSelect",
+      "tabId": "ger",
+      "inputSize": 8,
+      "multiSelectSource": "lista",
+      "multiSelectTableVariable": "SELEST",
+      "multiSelectOptionsVariable": "TABEST",
+      "multiSelectOptionsLoad": "set sc=$$ObterTabEstoque^WDOMTESTEPV100CRG(CE,.TABEST)",
+      "multiSelectGlobalReference": "^WDOMTESTEPVPDCFG(1,{company},1,1)",
+      "multiSelectSelectedText": "Selecionados",
+      "multiSelectEmptyText": "",
+      "labelColumn": 1,
+      "labelLine": 2,
+      "labelSize": 20,
+      "inputColumn": 22,
+      "inputLine": 2
+    },
+    {
+      "id": "tnf",
+      "description": "Tipo de Nota",
+      "variable": "TIPNF",
+      "type": "integer",
+      "tabId": "ger",
+      "required": true,
+      "piece": 4,
+      "inputSize": 4,
+      "lookupPreset": "tipoNota",
+      "labelColumn": 1,
+      "labelLine": 3,
+      "labelSize": 20,
+      "inputColumn": 22,
+      "inputLine": 3,
+      "displayLine": 3,
+      "displayColumn": 28,
+      "displaySize": 40
+    },
+    {
+      "id": "tbp",
+      "description": "Tabela de Preço",
+      "variable": "TABPRE",
+      "type": "integer",
+      "tabId": "ger",
+      "piece": 5,
+      "inputSize": 4,
+      "lookupPreset": "tabelaPreco",
+      "labelColumn": 1,
+      "labelLine": 4,
+      "labelSize": 20,
+      "inputColumn": 22,
+      "inputLine": 4,
+      "displayLine": 4,
+      "displayColumn": 28,
+      "displaySize": 40
+    }
+  ],
+  "indexes": [
+    {
+      "type": "fixed",
+      "fixedValue": "1"
+    },
+    {
+      "type": "company"
+    }
+  ],
+  "grids": [
+    {
+      "location": "usu",
+      "code": 21,
+      "line": 1,
+      "height": 14,
+      "startLine": 2,
+      "endLine": 14,
+      "maintenance": true,
+      "allowInsert": true,
+      "allowRemove": true,
+      "columns": [
+        {
+          "title": "Sequência",
+          "type": "n",
+          "width": 5,
+          "variable": "SEQUSU",
+          "recordKey": true,
+          "autoSequence": "auto",
+          "editable": false
+        },
+        {
+          "title": "Usuário Consistem",
+          "type": "n",
+          "width": 8,
+          "variable": "CODUSU",
+          "workPiece": 3,
+          "editable": true,
+          "required": true,
+          "f7Routine": "CSMENOP^%CSMEN299"
+        },
+        {
+          "title": "Nome",
+          "type": "a",
+          "width": 35,
+          "variable": "NOMUSU",
+          "displayOnly": true,
+          "displayExpression": "$$NomeUsuario^WDOMTESTEPV100CTAB2RG(codusu)"
+        },
+        {
+          "title": "Representante",
+          "type": "n",
+          "width": 8,
+          "variable": "CODREP",
+          "workPiece": 4,
+          "editable": true,
+          "f7Routine": "FTRE^CCPV299"
+        },
+        {
+          "title": "Nome Representante",
+          "type": "a",
+          "width": 30,
+          "variable": "NOMREP",
+          "displayOnly": true,
+          "displayExpression": "$$NomeRepresentante^WDOMTESTEPV100CTAB2RG(codEmpresa,codrep)"
+        },
+        {
+          "title": "Admin",
+          "type": "a",
+          "width": 6,
+          "variable": "ADMUSU",
+          "workPiece": 5,
+          "editable": true,
+          "type2": "combo",
+          "maintenanceType": "combo",
+          "optionsVariable": "TABADMUSU",
+          "createOptionsTable": true,
+          "optionsItems": [
+            {
+              "value": "S",
+              "description": "Sim"
+            },
+            {
+              "value": "N",
+              "description": "Não"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "ruleHooks": {
+    "initializeCode": "set $piece(wdomtestepvpdcfg1,Z,3)=\"N\"",
+    "extraMethods": "; Tabela de estoques (naturezas de estoque) para a multiseleção\n;\n; set sc=$$ObterTabEstoque^WDOMTESTEPV100CRG(codEmpresa,.tabEstoque)\nObterTabEstoque(codEmpresa,tabEstoque)\t;\n$$$VAR\nnew codNatureza\n;\nkill tabEstoque\nset codNatureza=\"\"\nfor  set codNatureza=$order(^ESANAT(codEmpresa,codNatureza)) quit:codNatureza=\"\"  set tabEstoque(codNatureza)=codNatureza_\" - \"_$piece($get(^ESANAT(codEmpresa,codNatureza)),Z,1)\n;\nquit $$$OK"
+  }
+}

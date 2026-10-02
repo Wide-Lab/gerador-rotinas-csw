@@ -162,9 +162,16 @@
     return "A";
   }
 
+  const PRIMEIRA_ACAO = 3500;
+
+  function actionLabelFor(position) {
+    if (position < 5) return PRIMEIRA_ACAO + position * 100;
+    return PRIMEIRA_ACAO + 5 + (position - 5) * 10;
+  }
+
   function create(overrides = {}) {
     const position = state.customButtons.length;
-    const baseLabel = 6000 + position * 100;
+    const baseLabel = actionLabelFor(position);
 
     return {
       id: overrides.id || u.createId(),
@@ -184,9 +191,10 @@
       help: String(overrides.help || ""),
       size: Number(overrides.size) || 14,
       initialState: Number(overrides.initialState) === 0 ? 0 : 1,
-      actionType: overrides.actionType === "screen" ? "screen" : "label",
+      actionType: ["screen", "duplicate", "justify"].includes(overrides.actionType) ? overrides.actionType : "label",
       actionLabel: cleanLabel(overrides.actionLabel, String(baseLabel)),
       actionRoutine: String(overrides.actionRoutine || ""),
+      actionCode: String(overrides.actionCode || ""),
       generateRoutine: overrides.generateRoutine !== false,
       routineSuffix: cleanSuffix(overrides.routineSuffix, nextSuffix(overrides.location || "parent")),
       auxiliaryTitle: String(overrides.auxiliaryTitle || overrides.text || `Tela auxiliar ${position + 1}`),
@@ -1032,7 +1040,7 @@
     buttonsForLocation(locationId)
       .filter(
         (button) =>
-          button.actionType !== "screen" && !cleanRoutine(button.actionRoutine, "")
+          button.actionType === "label" && !cleanRoutine(button.actionRoutine, "")
       )
       .forEach((button) => {
         const label = cleanLabel(button.actionLabel, "6000");
@@ -1044,8 +1052,59 @@
 
         lines.push(`\t; ${title}`);
         lines.push(`${label}\t;`);
-        lines.push(`\t; TODO: implementar a ação do botão ${title}.`);
-        lines.push("\tquit");
+
+        const code = String(button.actionCode || "").replace(/\r\n/g, "\n").replace(/\s+$/, "");
+        if (code.trim()) {
+          const body = code.split("\n");
+          body.forEach((line) => {
+            if (/^[%A-Za-z0-9]+\t/.test(line)) lines.push(line);
+            else lines.push(line.trim() ? `\t${line.replace(/^\t/, "")}` : "\t;");
+          });
+          const last = body[body.length - 1].trim();
+          if (!/^(quit|goto|q|g)\b/i.test(last.replace(/^[%A-Za-z0-9]+\t/, ""))) lines.push("\tquit");
+        } else {
+          lines.push(`\t; TODO: implementar a ação do botão ${title}.`);
+          lines.push("\tquit");
+        }
+        lines.push("\t;");
+      });
+
+    buttonsForLocation(locationId)
+      .filter((button) => button.actionType === "duplicate")
+      .forEach((button) => {
+        const label = cleanLabel(button.actionLabel, "3700");
+        if (written.has(label)) return;
+        written.add(label);
+
+        const definition = duplicateScreenDefinition(button, config);
+        if (!definition) return;
+
+        lines.push(`\t; ${u.sanitize(button.text.replace(/<\/?u>/gi, "")) || "Duplicar"}`);
+        lines.push(`${label}\tif ${definition.keyVariable}="" do ME^%CSUTIUD("${u.escapeMac(definition.keyDescription)}: Campo obrigatório!") quit`);
+        lines.push(`\tdo Show^${definition.routineName}("${label}EX^${routineName}","(${definition.keyVariable})")`);
+        lines.push("\tquit:$$CSP^%CSW1UTI()");
+        lines.push("\t;");
+        lines.push(`${label}EX\tgoto 0500`);
+        lines.push("\t;");
+      });
+
+    buttonsForLocation(locationId)
+      .filter((button) => button.actionType === "justify")
+      .forEach((button) => {
+        const label = cleanLabel(button.actionLabel, "3800");
+        if (written.has(label)) return;
+        written.add(label);
+
+        const definition = justifyScreenDefinition(button, config, locationId);
+        lines.push(`\t; ${u.sanitize(button.text.replace(/<\/?u>/gi, "")) || "Justificar"}`);
+        lines.push(`${label}\t;`);
+        String(button.actionCode || "").replace(/\r\n/g, "\n").split("\n")
+          .filter((line) => line.trim())
+          .forEach((line) => lines.push(`\t${line.replace(/^\t/, "")}`));
+        lines.push(`\tdo Show^${definition.routineName}("${label}EX^${routineName}","(${definition.parameters.join(",")})")`);
+        lines.push("\tquit:$$CSP^%CSW1UTI()");
+        lines.push("\t;");
+        lines.push(`${label}EX\tgoto ${cleanLabel(button.reloadDestination, "0500")}`);
         lines.push("\t;");
       });
 
@@ -1103,6 +1162,62 @@
     });
   }
 
+  function justifyScreenDefinition(button, config = app.getConfig(), locationId = button.location || "parent") {
+    const parameters = String(button.justifyParameters || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return {
+      button,
+      locationId,
+      parameters,
+      routineName: u.normalizeVariable(button.justifyRoutineName, `${config.routineName}JUS`),
+      title: String(button.justifyTitle || button.text || "Justificativa").replace(/<\/?u>/gi, ""),
+      fieldLabel: String(button.justifyFieldLabel || "Justificativa"),
+      rule: String(button.justifyRule || "").trim(),
+      maxLength: Number(button.justifyMaxLength) || 500,
+      fields: Array.isArray(button.justifyFields) ? button.justifyFields : [],
+      extraVariables: String(button.justifyExtraVariables || ""),
+      width: Number(button.justifyWidth) || 0
+    };
+  }
+
+  function justifyScreenDefinitions(config = app.getConfig()) {
+    return state.customButtons
+      .filter((button) => button.actionType === "justify")
+      .map((button) => justifyScreenDefinition(button, config));
+  }
+
+  function duplicateScreenDefinition(button, config = app.getConfig()) {
+    const keyField = app.indexes
+      .keyDefinitions()
+      .map((definition) => definition.field)
+      .filter(Boolean)
+      .pop();
+    if (!keyField) return null;
+
+    const keyVariable = u.normalizeVariable(keyField.variable);
+    return {
+      button,
+      keyField,
+      keyVariable,
+      keyDescription: keyField.description || keyVariable,
+      targetVariable: u.normalizeVariable(`${keyVariable}DES`),
+      routineName: u.normalizeVariable(
+        button.duplicateRoutineName,
+        `${config.routineName}DUP`
+      ),
+      title: `Duplicar ${config.title}`
+    };
+  }
+
+  function duplicateScreenDefinitions(config = app.getConfig()) {
+    return state.customButtons
+      .filter((button) => button.actionType === "duplicate" && (button.location || "parent") === "parent")
+      .map((button) => duplicateScreenDefinition(button, config))
+      .filter(Boolean);
+  }
+
   function generatedScreenDefinitions(config = app.getConfig()) {
     return state.customButtons
       .filter(
@@ -1156,6 +1271,8 @@
     showParameters,
     resolvedPosition,
     buttonText,
-    generatedScreenDefinitions
+    generatedScreenDefinitions,
+    duplicateScreenDefinitions,
+    justifyScreenDefinitions
   };
 })(window.GeradorRotinasJsonPadrao);

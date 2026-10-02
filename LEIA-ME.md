@@ -9,8 +9,9 @@ git checkout <branch>      # trocar
 git checkout main          # voltar ao original
 ```
 
-Abra o `gerador-json-ui-ajustada.html` normalmente (de preferência pelo Live Server,
-`http://localhost:5501`, que é o que faz o OCR da branch 4 funcionar).
+Abra o `gerador-json-ui-ajustada.html` normalmente. Direto do disco funciona; pelo Live
+Server (`http://localhost:5501`) também, e é o mais confortável quando se está mexendo nos
+módulos.
 
 ## As branches
 
@@ -20,15 +21,19 @@ Abra o `gerador-json-ui-ajustada.html` normalmente (de preferência pelo Live Se
 | `feat/1-validador-cache` | validador de regras Caché/CSW rodando junto com o gerador + correção real do limite de 31 caracteres nas globais da rotina 299 | [LEIA-ME-VALIDADOR.md](LEIA-ME-VALIDADOR.md) |
 | `feat/2-f7-inteligente` | busca dentro do catálogo de F7, sugestão de consulta por campo e aplicação em lote | [LEIA-ME-F7-INTELIGENTE.md](LEIA-ME-F7-INTELIGENTE.md) |
 | `feat/3-documento-para-json` | cola a especificação (Word, Excel, PDF, markdown, CSV, lista à mão) e sai o projeto inteiro | [LEIA-ME-DOCUMENTO-PARA-JSON.md](LEIA-ME-DOCUMENTO-PARA-JSON.md) |
-| `feat/4-imagem-para-json` | print da tela vira campos, grid, abas e botões, com OCR rodando dentro do navegador (inclui a branch 3) | [LEIA-ME-IMAGEM-PARA-JSON.md](LEIA-ME-IMAGEM-PARA-JSON.md) |
-| `feat/6-desenhador-para-cache` | JSON do desenhador React vira rotina Caché (inclui as branches 3 e 4) | [LEIA-ME-DESENHADOR-PARA-CACHE.md](LEIA-ME-DESENHADOR-PARA-CACHE.md) |
+| `feat/4-imagem-para-json` | print da tela vira campos por OCR — **retirado do produto** (ver abaixo) | — |
+| `feat/6-desenhador-para-cache` | tela do desenhador (builder) vira rotina Caché, puxando o projeto pela API | [LEIA-ME-DESENHADOR-PARA-CACHE.md](LEIA-ME-DESENHADOR-PARA-CACHE.md) |
+| — | **Documentar global**: classe COS `%Persistent` da global do projeto, porte do Mapeamento de Global do consistem-tools | [LEIA-ME-DOCUMENTACAO-DE-GLOBAL.md](LEIA-ME-DOCUMENTACAO-DE-GLOBAL.md) |
 | `feat/5-tudo-junto` | todas juntas — **é a recomendada para usar** | todos os arquivos acima |
 
-> As branches 4 e 6 acabaram recebendo as demais junto (o importador por imagem e o do
-> desenhador compartilham a inferência de tipo, variável e F7). As branches 1, 2 e 3
-> continuam isoladas se você quiser avaliar uma ideia por vez.
+> O **Gerar por imagem** saiu do produto: o OCR acertava pouco, e o mesmo desenho vem exato
+> pela API do builder, sem adivinhação. O módulo e o LEIA-ME continuam no histórico do git
+> se um dia fizerem falta.
+>
+> As branches 1, 2 e 3 continuam isoladas se você quiser avaliar uma ideia por vez.
 
-Nenhuma delas usa serviço pago, API ou IA remota. Tudo roda local no navegador.
+Nada aqui usa IA remota nem serviço pago. A única chamada de rede é a busca do projeto no
+builder da Widelab, e ela é opcional — dá para continuar colando o JSON à mão.
 
 ## Como cada branch mexeu no código
 
@@ -67,12 +72,66 @@ depois do corte.
 Não deu para testar só olhando: montei um ambiente de teste que carrega o HTML de
 verdade e executa o gerador.
 
-- **jsdom** (`node`) para o gerador inteiro: carrega os módulos na ordem do HTML, roda
-  `app.refresh()`, gera as rotinas de interface, as RGs e as 299, e confere que nada
-  estoura. Também exercita o validador, o assistente de F7 (busca, chips e lote) e o
-  importador de especificação nos três formatos.
-- **Chrome headless** (puppeteer) para a parte que precisa de canvas e worker: desenha um
-  print sintético de um terminal 108x28, joga no importador por imagem, roda o OCR real e
-  confere a grade estimada, os campos detectados e a rotina gerada no fim.
+- **jsdom** (`node`) para o gerador inteiro: carrega o HTML de verdade e os módulos na ordem
+  em que ele os declara, roda `app.refresh()`, gera as rotinas de interface, as RGs e as 299,
+  e confere que nada estoura. Também exercita o validador, o assistente de F7 (busca, chips e
+  lote), o importador de especificação nos três formatos e o do desenhador.
+- **Acervo real do builder**: os 24 projetos publicados em `builder.widelab.com.br` — 106
+  telas com componentes — passam pelo conversor a cada mudança. Hoje: 106 convertidas, 0
+  exceções.
+- **Invariantes de interface**: o `.mac` gerado é conferido contra
+  `resources/interface/invariantes.md` do plugin `csw` — trava de execução, faixa das labels,
+  resolução 108x28, saída, chamada de regra.
 
 Resultados relevantes estão anotados em cada LEIA-ME.
+
+## Limpar a tela
+
+**Limpar tela**, no cabeçalho ao lado de *Restaurar padrão*, zera tudo: campos, abas, grid,
+botões, chaves, nome da rotina, global e RG. Sobram só os valores que não fazem sentido em
+branco — janela 108x28, espera do Lock em 3 segundos, `Gerar e integrar rotina RG` marcado.
+
+São dois botões porque são duas intenções: *Restaurar padrão* traz o exemplo de volta,
+*Limpar tela* deixa a folha em branco para começar do zero.
+
+## O que abre junto com o gerador
+
+O projeto que carrega ao abrir (e que o botão **Restaurar padrão** traz de volta) é o menor
+exemplo que ainda mostra o que todo mundo usa:
+
+```
+WDCCMOT010 — Motivos de Parada   (modo Grid, 108 x 28)
+
+  Código da Empresa   [1] [Empresa Natreb..................]   ← campo com consulta (F7)
+  Código do Motivo    [142]                                    ← campo chave
+
+  ┌ Setor │ Descrição do Setor │ Tempo Meta │ Vigência ┐       ← grid, 1ª coluna é a chave
+```
+
+Dois campos, quatro colunas, nenhuma aba, nenhum botão personalizado. Antes vinha um cadastro
+de configuração com quatro abas e oito campos, e quem chegava tinha que apagar tudo antes de
+começar a própria tela.
+
+Sai limpo no validador: 158 linhas de `.mac` e 94 de RG.
+
+> **Grid na tela principal exige modo Grid.** É por isso que o padrão está em *Consulta com
+> grid* e não em *Cadastro*: no modo Grid o label `3000` é o foco do grid, não a gravação.
+> Cadastro que precisa de grid junto põe o grid numa aba.
+
+## Gerar rotinas pelo Claude Code (skill `gerar-rotina-cache`)
+
+O `cli/` roda o gerador sem navegador (ver [cli/LEIA-ME-CLI.md](cli/LEIA-ME-CLI.md)), e a
+skill em `skill/gerar-rotina-cache/` ensina o Claude Code a usar o gerador: ler o documento
+da tela, montar o projeto, validar, gravar o `.mac`, compilar no DESENV e regerar a interface.
+
+Instalação:
+
+1. Clone este repositório e rode `npm install` dentro de `cli/`.
+2. Crie a variável de ambiente `GERADOR_ROTINAS` com o caminho do clone
+   (ex.: `setx GERADOR_ROTINAS "C:\workspacecsw\gerador-rotinas-csw"`).
+3. Copie `skill/gerar-rotina-cache` para `%USERPROFILE%\.claude\skills\gerar-rotina-cache`.
+4. No Claude Code, peça a tela normalmente ("cria a tela de cadastro de X", ou cole o
+   documento). Os exemplos em `cli/exemplo-*.json` cobrem cadastro, consulta, abas, grid de
+   manutenção, colunas por mês e impressão de etiquetas.
+
+Antes de mudar o gerador, rode `npm run teste` em `cli/`.

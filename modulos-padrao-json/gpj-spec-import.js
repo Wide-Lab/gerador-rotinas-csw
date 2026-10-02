@@ -485,7 +485,7 @@
             type: record.type || inferType(record.description) || "string",
             width: record.size || defaultSize(record.type, record.description),
             workPiece: index + 1,
-            recordKey: record.key === true,
+            recordKey: record.key === true || (index === 0 && !block.records.some((item) => item.key === true)),
             detail: true
           }))
         });
@@ -528,6 +528,14 @@
           field.decimalFormat = type === "float" ? "v3" : "v2";
         }
 
+        if (["combo", "radio", "checkbox"].includes(type)) {
+          field.optionsVariable = "TAB" + variable;
+          field.optionsItems = [
+            { id: app.utils.createId(), value: "0", description: "Inativo" },
+            { id: app.utils.createId(), value: "1", description: "Ativo" }
+          ];
+        }
+
         fields.push(field);
       });
     });
@@ -549,7 +557,7 @@
       const inputColumn = 1 + labelSize + 1;
 
       list.forEach((field, index) => {
-        const line = (isParent ? 2 : 1) + index;
+        const line = 1 + index;
         field.labelColumn = 1;
         field.labelLine = line;
         field.labelSize = labelSize;
@@ -606,20 +614,27 @@
    * Interface
    * ------------------------------------------------------------------ */
 
-  const EXAMPLE = `Rotina: WDOMPV130
-Título: Cadastro de Parâmetros de Pedido
-Global: WDOMPVPAR
+  const EXAMPLE = `Rotina: WDCCMOT010A
+Título: Cadastro de Motivo de Parada
+Global: WDCCMOTPAR
 
 Código da Empresa | inteiro | 4 | chave | obrigatório
-Código do Parâmetro | inteiro | 6 | chave | obrigatório
+Código do Motivo | inteiro | 6 | chave | obrigatório
 
 # Dados Gerais
 Campo | Tipo | Tamanho | Obrigatório
 Descrição | texto | 45 | sim
+Data do Cadastro | data | 8 | sim
+Tempo Padrão | decimal | 8 |
 Situação | combo | 10 | sim
-Código do Cliente | inteiro | 10 |
-Data do Cadastro | data | 8 |
-Percentual de Desconto | decimal | 8 |
+
+# Grid: Setores
+Coluna | Tipo | Tamanho
+Setor | inteiro | 6
+Descrição do Setor | texto | 30
+Responsável | texto | 25
+Tempo Meta | decimal | 8
+Vigência | data | 10
 
 # Observações
 Observação Geral (textarea, 200)

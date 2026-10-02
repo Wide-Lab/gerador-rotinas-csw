@@ -1,0 +1,54 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Gerador: simular arquivo aberto",
+      "type": "process",
+      "command": "node",
+      "args": ["${workspaceFolder}/cli/gerar-rotina.mjs", "${input:tipoEntrada}", "${file}"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "Gerador: gerar .mac do arquivo aberto",
+      "type": "process",
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/cli/gerar-rotina.mjs", "${input:tipoEntrada}", "${file}",
+        "--saida", "${input:pastaSaida}"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "Gerador: mostrar código do arquivo aberto",
+      "type": "process",
+      "command": "node",
+      "args": ["${workspaceFolder}/cli/gerar-rotina.mjs", "${input:tipoEntrada}", "${file}", "--mostrar"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "Gerador: modelo de especificação",
+      "type": "process",
+      "command": "node",
+      "args": ["${workspaceFolder}/cli/gerar-rotina.mjs", "--modelo", "spec"],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "tipoEntrada",
+      "type": "pickString",
+      "description": "O que é o arquivo aberto?",
+      "options": ["--spec", "--projeto", "--desenhador"],
+      "default": "--spec"
+    },
+    {
+      "id": "pastaSaida",
+      "type": "promptString",
+      "description": "Pasta onde gravar os .mac",
+      "default": "C:\\workspacecsw\\projetos\\DESENV\\custom\\om\\rotinas\\WDOM"
+    }
+  ]
+}

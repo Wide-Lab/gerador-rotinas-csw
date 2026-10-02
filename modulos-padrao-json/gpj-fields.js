@@ -2,10 +2,12 @@
   const { state, utils: u, el } = app;
   const expandedFieldIds = new Set();
 
-  const canDisplay = (field) => !["date", "textArea"].includes(field.type);
+  const isMultiSelect = (field) => field.type === "multiSelect";
+  const isListMultiSelect = (field) =>
+    isMultiSelect(field) && String(field.multiSelectSource || "").trim().toLowerCase() === "lista";
+  const canDisplay = (field) => !["date", "textArea"].includes(field.type) && !isListMultiSelect(field);
   const hasDisplay = (field) => canDisplay(field) && field.hasDisplay === true;
   const usesOptions = (field) => ["combo", "checkbox", "radio"].includes(field.type);
-  const isMultiSelect = (field) => field.type === "multiSelect";
   const hasLookup = (field) =>
     Boolean(
       String(field.f7Routine || "").trim() ||
@@ -63,9 +65,7 @@
 
     return fields.length
       ? Math.max(...fields.map((field) => Number(field.inputLine) || 0)) + 1
-      : tabId === "parent"
-        ? 2
-        : 1;
+      : 1;
   }
 
   function defaultLocation() {
@@ -334,9 +334,15 @@
       displaySize: overrides.displaySize ?? 30,
       lookupPreset: overrides.lookupPreset ?? "none",
       f7Routine: overrides.f7Routine ?? "",
+      f8Routine: overrides.f8Routine ?? "",
+      piece: overrides.piece ?? null,
+      f7ListLoad: overrides.f7ListLoad ?? "",
+      f7ListTitles: overrides.f7ListTitles ?? "",
+      f7ListSizes: overrides.f7ListSizes ?? "",
       extraVariables: overrides.extraVariables ?? "",
       valcpCode: overrides.valcpCode ?? "",
       afterFieldCode: overrides.afterFieldCode ?? "",
+      enabledWhen: overrides.enabledWhen ?? "",
       displayLoadMode:
         overrides.displayLoadMode ??
         (String(overrides.valcpCode || "").trim() ? "valcp" : "reference"),
@@ -378,6 +384,11 @@
       multiSelectTableVariable: overrides.multiSelectTableVariable ?? (type === "multiSelect" ? `TAB${u.normalizeVariable(overrides.variable ?? "CAMPO")}` : ""),
       multiSelectSelectedText: overrides.multiSelectSelectedText ?? "Selecionados",
       multiSelectGlobalReference: overrides.multiSelectGlobalReference ?? "",
+      multiSelectSource: overrides.multiSelectSource ?? "codigo",
+      multiSelectOptionsVariable: overrides.multiSelectOptionsVariable ?? "",
+      multiSelectOptionsLoad: overrides.multiSelectOptionsLoad ?? "",
+      multiSelectEmptyText: overrides.multiSelectEmptyText ?? null,
+      multiSelectValueType: overrides.multiSelectValueType ?? "",
       generateF7Routine299: overrides.generateF7Routine299 ?? false,
       f7GeneratedRoutineName: overrides.f7GeneratedRoutineName ?? "",
       f7GeneratedRoutineAuto: overrides.f7GeneratedRoutineAuto ?? true,
@@ -863,20 +874,36 @@
     return lastKey > position;
   }
 
-  // Campo que guarda o valor numa variável só dele, não num piece.
   function usesOwnVariable(field) {
-    return isKeyField(field) || isBeforeKeyField(field);
+    return isKeyField(field) || isBeforeKeyField(field) || field.stored === false;
   }
 
   function pieceAssignments(config = app.getConfig()) {
     const counters = new Map();
     const result = new Map();
 
+    const fixed = new Map();
+    mainFields().forEach((field) => {
+      if (usesOwnVariable(field) || isMultiSelect(field) || isGridTabField(field)) return;
+      const piece = Number(field.piece);
+      if (piece > 0) {
+        const dataVariable = dataVariableFor(field, config);
+        if (!fixed.has(dataVariable)) fixed.set(dataVariable, new Set());
+        fixed.get(dataVariable).add(piece);
+      }
+    });
+
     mainFields().forEach((field) => {
       if (usesOwnVariable(field) || isMultiSelect(field) || isGridTabField(field)) return;
 
       const dataVariable = dataVariableFor(field, config);
-      const piece = (counters.get(dataVariable) || 2) + 1;
+      if (Number(field.piece) > 0) {
+        result.set(field.id, { dataVariable, piece: Number(field.piece) });
+        return;
+      }
+      const taken = fixed.get(dataVariable) || new Set();
+      let piece = (counters.get(dataVariable) || 2) + 1;
+      while (taken.has(piece)) piece += 1;
       counters.set(dataVariable, piece);
       result.set(field.id, { dataVariable, piece });
     });
@@ -1010,6 +1037,17 @@
     return u.normalizeVariable(`SEL${suffix}`, "SELITEM");
   }
 
+  function multiSelectOptionsVariable(field) {
+    return u.normalizeVariable(
+      field.multiSelectOptionsVariable,
+      `OPC${u.normalizeVariable(field.variable, "CAMPO")}`
+    );
+  }
+
+  function listMultiSelectFields(config = app.getConfig()) {
+    return multiSelectFields(config).filter(isListMultiSelect);
+  }
+
   function multiSelectTableVariables(config = app.getConfig()) {
     return [...new Set(
       multiSelectFields(config).map(multiSelectTableVariable)
@@ -1087,6 +1125,10 @@
     multiSelectTableVariable,
     multiSelectInputVariable,
     multiSelectTableVariables,
+    isListMultiSelect,
+    parentReadingOrder,
+    multiSelectOptionsVariable,
+    listMultiSelectFields,
     defaultOptions,
     defaultOptionItems
   };

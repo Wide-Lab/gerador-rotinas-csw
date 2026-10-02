@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Laboratório JSON — Interface Ajustada</title>
+  <title>Gerador de Telas Caché</title>
   <link rel="stylesheet" href="gerador-json-wdompv120.css">
 
   <script src="modulos-padrao-json/gpj-state.js" defer></script>
@@ -24,15 +24,15 @@
   <script src="modulos-padrao-json/gpj-app.js" defer></script>
   <script src="modulos-padrao-json/gpj-f7-assistant.js" defer></script>
   <script src="modulos-padrao-json/gpj-spec-import.js" defer></script>
-  <script src="modulos-padrao-json/gpj-image-import.js" defer></script>
   <script src="modulos-padrao-json/gpj-designer-import.js" defer></script>
+  <script src="modulos-padrao-json/gpj-class-doc.js" defer></script>
   <script src="modulos-padrao-json/gpj-validator.js" defer></script>
 </head>
 <body>
   <header class="header">
     <div>
-      <h1>Laboratório JSON — Interface Ajustada</h1>
-      <p>Versão com layout dinâmico: o maior label define o espaço e o alinhamento move label, leitor, display e botões em conjunto.</p>
+      <h1>Gerador de Telas Caché</h1>
+      <p>Monta a rotina de interface, a RG e a classe da global no padrão Consistem — a partir do desenho, de um documento ou dos campos preenchidos aqui.</p>
     </div>
 
     <div class="header-actions">
@@ -40,6 +40,7 @@
       <button id="labPasteJsonButton" type="button" class="button">Colar JSON</button>
       <button id="labExportJsonButton" type="button" class="button">Exportar JSON</button>
       <button id="labCopyJsonButton" type="button" class="button">Copiar JSON</button>
+      <button id="clearProjectButton" type="button" class="button">Limpar tela</button>
       <button id="loadExampleButton" type="button" class="button">Restaurar padrão</button>
       <button id="copyMacButton" type="button" class="button primary">Copiar todas as interfaces</button>
       <button id="copyRgButton" type="button" class="button primary">Copiar todas as RGs</button>
@@ -360,6 +361,10 @@
                 <input id="gridConsultButtonLine" type="number" min="1" value="1">
               </div>
               <div class="field span-2">
+                <label for="gridFinalFocus">Foco depois dos campos</label>
+                <select id="gridFinalFocus" title="Para onde vai o foco quando os campos terminam de ser lidos."></select>
+              </div>
+              <div class="field span-2">
                 <label>Labels geradas</label>
                 <input value="Consultar: 2000 | Limpar: 0500" disabled>
               </div>
@@ -373,6 +378,15 @@
 
           <p class="helper">
             Os campos cadastrados na seção <strong>Campos</strong> continuam sendo os campos principais/filtros da rotina. Somente as colunas marcadas como <strong>Editar</strong> entram na manutenção do Grid, usando o padrão <strong>0,3,3,codGrid</strong> dentro da label 4000.
+          </p>
+
+          <label class="checkbox-option grid-inline-option">
+            <input id="gridInlineSaveOnConfirm" type="checkbox">
+            Confirmar a linha já grava na global (dispensa o Salvar)
+          </label>
+
+          <p class="helper">
+            Sem isso, a linha confirmada fica só na global de trabalho e só vai para a global de negócio quando o operador clica em <strong>Salvar</strong>. Com a opção ligada, a gravação definitiva acontece na própria label 4900, logo depois do <code>GravarGlobalTrabalho</code>.
           </p>
 
           <div id="gridMaintenanceOptions" class="sub-card grid-maintenance-panel hidden">
@@ -432,6 +446,18 @@
                   <span>
                     <strong>Permitir remoção</strong>
                     <small>Libera a exclusão da linha selecionada da global temporária.</small>
+                  </span>
+                </label>
+
+                <label class="grid-maintenance-toggle">
+                  <select id="gridAutoSequence">
+                    <option value="">Digitada</option>
+                    <option value="auto">Automática</option>
+                    <option value="editavel">Automática, editável e reordena</option>
+                  </select>
+                  <span>
+                    <strong>Sequência da coluna chave</strong>
+                    <small>Automática usa a próxima livre. Editável sugere a próxima e, se repetir, empurra as seguintes.</small>
                   </span>
                 </label>
 
@@ -566,6 +592,30 @@
               <label><input id="generateDelete" type="checkbox" checked> Excluir</label>
               <label><input id="generateLock" type="checkbox" checked> Lock e Unlock</label>
             </div>
+
+            <div class="field lock-timeout-field">
+              <label for="lockTimeout">Espera do Lock (segundos)</label>
+              <input id="lockTimeout" type="number" min="0" max="3600" step="1" value="3">
+              <p class="helper">Terceiro parâmetro do <code>$$$IfLock</code>. Em branco ou 0 o Lock espera indefinidamente até o outro processo soltar o registro — é o que trava a tela sem dar retorno ao operador.</p>
+            </div>
+
+            <label class="checkbox-option own-f7-option">
+              <input id="generateOwnF7" type="checkbox">
+              Gerar o F7 deste cadastro (rotina 299)
+            </label>
+
+            <div class="field own-f7-field">
+              <label for="ownF7DescriptionField">Campo que aparece no display da consulta</label>
+              <select id="ownF7DescriptionField"></select>
+              <p class="helper">Outras telas passam a consultar esta global pelo F7 e recebem esta descrição no display. A consulta é filtrada pela empresa.</p>
+              <button id="saveOwnF7Button" type="button" class="button">Guardar no catálogo de F7</button>
+              <p class="helper">Guardado, ele aparece na lista de sugestões de qualquer projeto — é assim que a outra tela usa este F7 sem digitar a rotina.</p>
+            </div>
+
+            <div class="field class-doc-field">
+              <button id="classDocButtonSlot" type="button" class="button">Documentar global</button>
+              <p class="helper">Gera a classe COS (<code>%Persistent</code>) que documenta esta global — propriedades, chaves, pieces e Storage.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -591,13 +641,26 @@
               <summary>Posição e local dos botões</summary>
               <div class="form-grid advanced-details-content">
                 <div class="field">
+                  <label for="btnManterAlignment">Alinhamento</label>
+                  <select id="btnManterAlignment">
+                    <option value="left">Esquerda da tela</option>
+                    <option value="fields">Alinhado com os campos</option>
+                    <option value="center">Centro</option>
+                    <option value="manual">Coluna manual</option>
+                  </select>
+                </div>
+                <div class="field">
                   <label for="btnManterColumn">Coluna inicial</label>
                   <input id="btnManterColumn" type="number" min="1" value="1">
                 </div>
                 <div class="field">
-                  <label for="btnManterLine">Linha sugerida</label>
+                  <label for="btnManterLine">Linha</label>
                   <input id="btnManterLine" type="number" min="1" value="24">
-                  <small>Duas linhas após o final do TabPanel. Ao editar, o valor passa a ser manual.</small>
+                  <label class="switch-label">
+                    <input id="btnManterLineAuto" type="checkbox" checked>
+                    Linha automática
+                  </label>
+                  <small>Com abas, duas linhas após o TabPanel; sem abas, duas linhas após o último campo ou o grid. Editar a linha desmarca a opção; marcar de volta recalcula.</small>
                 </div>
                 <div class="field span-2">
                   <label for="btnManterLocation">Local dos botões</label>
@@ -784,6 +847,26 @@
         <div id="fieldMultiSelectConfiguration" class="sub-card hidden">
           <h3>Configuração da Multi-Seleção</h3>
           <div class="form-grid">
+            <div class="field span-2">
+              <label for="fieldMultiSelectSource">Origem das opções</label>
+              <select id="fieldMultiSelectSource">
+                <option value="codigo">Código digitado + F7</option>
+                <option value="lista">Lista para marcar (^%CSUTIMM)</option>
+              </select>
+            </div>
+            <div class="field span-2">
+              <label for="fieldMultiSelectOptionsVariable">Tabela das opções</label>
+              <input id="fieldMultiSelectOptionsVariable" placeholder="Ex.: TABSIT">
+            </div>
+            <div class="field span-2">
+              <label for="fieldMultiSelectOptionsLoad">Regra que carrega as opções</label>
+              <input id="fieldMultiSelectOptionsLoad" placeholder="Ex.: set sc=$$ObterSitEtiqueta^CCTTGARG001(CE,1,.TABSIT)">
+            </div>
+            <div class="field span-6">
+              <p class="helper lookup-helper">
+                Lista: a tabela das opções fica no formato TABELA(código)="código-descrição" e é carregada na abertura da rotina principal. A tela mostra as opções para marcar, sem F7 nem display.
+              </p>
+            </div>
             <div class="field span-3">
               <label for="fieldMultiSelectTableVariable">Variável da tabela selecionada</label>
               <input id="fieldMultiSelectTableVariable" placeholder="Ex.: TABNOT ou TABTIPONOTA">

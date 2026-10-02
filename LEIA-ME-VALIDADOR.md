@@ -274,3 +274,375 @@ A variável entra no `New` e no reset do `0500` (com a exceção que já existia
 que vem da empresa da sessão). A variável de dados base continua declarada e passada para
 a RG mesmo quando nenhum campo mora nela — ela guarda data/hora e operador nos dois
 primeiros pieces.
+
+## Alinhamento com as invariantes de interface da Consistem
+
+Comparei o `.mac` gerado contra `resources/interface/invariantes.md` e o
+`esqueleto-tela-classica.md` do plugin `csw`. O gerador já atendia quase tudo — trava de
+execução, `ME^%CSUTICSP`, `Valcp{NNNN}`/`Validate`, `ValidarDisplay^%CSW1GRID`, saída com
+`FJ^%CSUTIUD` + `FJ^%CSW1UTI`, regra chamada com `set sc=$$`, sem `kill (a,b)`. Dois desvios
+reais apareceram:
+
+**Ação de botão ocupava o 6000.** No padrão, `6000` é o componente de mensagens (`^%CSMSG`) e
+`7000(HABBOT)` a habilitação de botões — nenhum dos dois é label de ação. As ações vivem na
+faixa `3XXX`. Os botões personalizados agora nascem em **3500**, de 100 em 100 (3500…3900); do
+sexto em diante o passo cai para 10, deslocado em 5 (3505, 3515…) para não bater nas centenas.
+O `3000` continua sendo a gravação e o `3100` a exclusão. A faixa `4XXX` do grid editável não
+muda — é o padrão documentado da manutenção em linha.
+
+**Altura da tela passava de 28 linhas.** Com abas, a altura automática crescia junto com o
+TabPanel e saía `csw:aj:108,29`. A resolução do CSW é 108 x 28; agora a altura é limitada a 28
+e quem encolhe é o TabPanel.
+
+**Combo sem tabela de opções.** No *Gerar por documento*, um campo declarado como combo, radio
+ou checkbox saía sem tabela — o `^%CSLE` fica sem o que listar e o validador acusava erro.
+Agora vem com `TAB<VARIÁVEL>` e dois itens (Inativo/Ativo) para ajustar.
+
+### Como conferir
+
+O harness de teste carrega o HTML real do gerador no jsdom e roda a pipeline inteira
+(importar → projeto → `.mac` → validador), verificando: trava de execução, tratamento do
+`sc`, `6000` livre, sem label `5XXX`, sem `kill` com parênteses, resolução 108x28, saída
+correta e chamada de regra com `set sc=$$`. As três telas de referência passam nas onze regras.
+
+## Espera do Lock (terceiro parâmetro do $$$IfLock)
+
+A RG saía com o Lock sem tempo de espera:
+
+```objectscript
+	if $$$IfLock("+","^WDCCMOT(codEmpresa,codigo)")
+```
+
+Sem o terceiro parâmetro o Caché **espera indefinidamente** o outro processo soltar o
+registro. Na prática a tela congela sem retorno para o operador — não é erro de compilação,
+é comportamento em produção.
+
+O padrão real do ERP passa os segundos:
+
+```objectscript
+	if '$$$IfLock("+","^WDCAPMPPLT(1,codEmpresa,1,codOF)",3) do  quit sc
+	. set sc=$$$ERROR(10000,$$$MsgLock("Paletes da OF "_codOF,"o",...))
+```
+
+Agora existe o campo **Espera do Lock (segundos)** ao lado das opções da RG, com 3 por
+padrão. Em branco ou 0 o parâmetro não é emitido, mantendo a espera indefinida para quem
+precisar dela de propósito.
+
+```
+espera 3s   →  if $$$IfLock("+","^WDCCMOTPAR(codEmpresa,codMotivo)",3)
+espera 30s  →  if $$$IfLock("+","^WDCCMOTPAR(codEmpresa,codMotivo)",30)
+espera 0    →  if $$$IfLock("+","^WDCCMOTPAR(codEmpresa,codMotivo)")
+```
+
+O valor entra no JSON do projeto (`lockTimeout`), então viaja junto ao exportar e importar.
+
+## Revisão geral contra a skill de validação
+
+Apliquei o checklist da `cache-consistem-validacao` a **todo** o acervo do builder, não a
+telas escolhidas a dedo: 46 telas convertidas, **124 rotinas** conferidas (interfaces, abas e
+RGs).
+
+As 20 checagens, por categoria:
+
+| categoria | o que é verificado |
+|---|---|
+| Labels | `0000`/`0500`/`9000`/`9999`, `Show(`, `Validate()`, ao menos um `Valcp` |
+| Variáveis | MAIÚSCULAS na interface, camelCase na RG, `CT=%index` no `0000`, `CE`/`%index`/`%conta` fora do `new` |
+| CSLE | `quit:$$CSP` depois de cada campo, `cpNNNN` sem repetição, `NNNNON` casando com o `cpNNNN` da linha |
+| Grid | `Inicializar`/`Limpar`/`ValidarDisplay`/`Finalizar`, grid finalizado no `9999` |
+| Abas | `csw:labelseltab`, `9999` delegado à pai, botões por `csw:btnManter` e não `csw:botao` |
+| Mtemp | indexada por `term`, persistência só por macro (`$$$SetG`/`$$$KillMergeG`) |
+| Tags | `csw:labelcreate`, `csw:labeldestroy:9999`, `csw:csp:gerar`, `csw:aj` pareado com `AJ^%CSUTIUD` |
+| Navegação | `%=27`/`%=140` nas `EX` de campo, `quit:$$CSP` depois de cada `Show^` |
+
+```
+telas processadas:     46
+rotinas verificadas:  124
+nenhuma checagem falhou
+```
+
+### Quatro alarmes falsos, todos meus
+
+O primeiro resultado acusou 82 falhas. Nenhuma era do gerador — eram regras minhas escritas
+sem conferir a convenção real. Vale registrar, porque são armadilhas de quem for escrever
+checagem nova:
+
+**`sc` e `mtempROTINA` são minúsculos.** Não é desvio: o próprio esqueleto Consistem tem
+`sc`, e rotinas de produção trazem `New^%CSW1UTI("VAR1,...,sc,...,mtempCIAOPGQ060A,...")`.
+Exigir MAIÚSCULAS em tudo reprovava 46 rotinas corretas.
+
+**Rotina de aba não tem `CT=%index`.** Ela tem `0000 quit` vazio, como a skill manda. A
+checagem só se aplica à rotina pai.
+
+**Tela sem campo CSLE não tem `Valcp`.** Consulta só com grid não valida campo nenhum.
+
+**`EX` de botão não navega por tecla.** `3500EX goto 2999` é retorno de `Show^`, não saída de
+campo — `%=27`/`%=140` só valem nas `EX` que têm o `ON` correspondente.
+
+### Global das abas: conferido, está certo
+
+Numa tela com abas a diferença entre os nós é a **fixa**, nunca um nome de global diferente:
+
+```
+pai        do $$$SetG(^WDCCMOT010A(codEmpresa,codMotivo),wdccmot0)
+aba Geral  do $$$SetG(^WDCCMOT010A(codEmpresa,codMotivo,4),wdccmot010Atab1)
+aba grid   do $$$KillMergeG(^WDCCMOT010A(codEmpresa,codMotivo,5),^mtempWDCCMOT010ATAB2(term))
+```
+
+A global de trabalho é outra história: sai como `^mtempROTINATABn`, que é convenção real
+(74 ocorrências no clone, do tipo `^mtempASALWMS100TAB1`), e o campo **Global de trabalho**
+na seção do grid aceita trocar — a edição pega e vai para a RG gerada.
+
+## Primeiro campo na linha 1
+
+O primeiro campo da rotina principal nascia na **linha 2**, deixando a linha 1 vazia. Na tela
+isso parece campo faltando — e não havia motivo: aba já começava na linha 1.
+
+Fui conferir em produção antes de mexer. Das rotinas com `csw:label`, 21 começam na linha 1 e
+19 na linha 2 — e, nessas 19, a linha 1 está mesmo vazia. Ou seja, as duas formas existem,
+nenhuma é regra. Ficou a linha 1, que é a que não deixa buraco.
+
+Mudou em três lugares:
+
+- `nextLine()` em `gpj-fields.js` — o primeiro campo agora começa em 1 tanto na rotina
+  principal quanto na aba (antes era `parent ? 2 : 1`);
+- o *Gerar por documento*, que somava o mesmo deslocamento;
+- o projeto padrão que abre com o gerador.
+
+O TabPanel continua sendo posicionado depois dos campos do cabeçalho — com dois campos na
+principal ele vai para a linha 4, sem colidir.
+
+```
+; csw:label:1,1,18,Código da Empresa*
+; csw:display:25,1,40,ds1000
+; csw:label:1,2,18,Código do Motivo*
+```
+
+O importador do desenhador não muda: lá a linha vem do desenho.
+
+## Botões de manutenção: linha e alinhamento
+
+A linha sugerida só era calculada **quando havia abas** — duas linhas depois do TabPanel.
+Sem abas ela ficava parada no valor do padrão, e um cadastro de três campos saía com o
+Salvar lá na linha 26, com um vão enorme no meio da tela.
+
+Agora, sem abas, a sugestão é **duas linhas depois do último campo** — ou do grid, quando
+ele existe:
+
+```
+campos nas linhas 1,2,3          →  botões na linha 5
+grid terminando na linha 15      →  botões na linha 17
+```
+
+Com abas nada muda: continua duas linhas após o TabPanel.
+
+### Alinhamento
+
+Campo novo em *Posição e local dos botões*:
+
+| opção | coluna |
+|---|---|
+| Esquerda da tela | 1 |
+| Alinhado com os campos | a coluna do leitor (onde o dado começa) |
+| Centro | centralizado na largura da janela |
+| Coluna manual | o que estiver digitado |
+
+Num cadastro com os leitores na coluna 19, numa janela de 108:
+
+```
+left    → csw:btnManter:1,5
+fields  → csw:btnManter:19,5
+center  → csw:btnManter:31,5
+```
+
+A largura da barra não está no projeto — quem desenha os três botões é o componente. O
+`center` usa 48 colunas, medido numa tela de 108, mais 16 quando há "Salvar e outro".
+
+Digitar na coluna à mão troca o alinhamento para **Coluna manual** sozinho, para o
+automático não sobrescrever a escolha no refresh seguinte. O valor viaja no JSON do projeto.
+
+### A linha travava depois de editada uma vez
+
+O cálculo automático desligava quando se digitava na linha — e **não voltava mais**. Não
+havia como religar: nem tirando as abas, nem trocando os campos. Uma tela que teve abas em
+algum momento ficava com a linha daquele TabPanel (`2 + 20 - 1 + 2 = 23`) mesmo depois de
+virar um cadastro de três campos.
+
+Agora existe a caixa **Linha automática**, ao lado do campo:
+
+```
+1) automático         linha  5   caixa marcada
+2) digitei 23         linha 23   caixa desmarcada
+3) remarquei a caixa  linha  5   caixa marcada
+```
+
+Editar a linha continua desmarcando — o valor digitado manda. A diferença é que dá para
+voltar.
+
+### "Usar abas" marcado sem nenhuma aba
+
+O `23` que aparecia numa tela de dois campos é a conta **com abas**: `2 + 20 - 1 + 2`. E a
+tela não tinha aba nenhuma — só a caixa *Usar abas* marcada.
+
+O layout olhava a caixa, não o conteúdo. Um projeto nesse estado (importado assim, ou vindo
+de uma sessão em que as abas foram removidas) reservava espaço para um TabPanel que não é
+desenhado, e os botões iam para o fim da tela.
+
+Agora as três sugestões que dependem de aba — altura do painel, linha dos botões e altura da
+janela — perguntam por `hasTabs()`, que exige a caixa marcada **e** ao menos uma aba:
+
+```
+usar abas marcado, zero abas  →  linha 4   (antes: 23)
+uma aba de verdade            →  linha 25
+```
+
+### Trocar de Grid para Cadastro deixava a linha do grid
+
+Segundo motivo para a linha teimar num valor alto: **o grid não some quando o modo muda.**
+Trocar de *Consulta com grid* para *Cadastro* mantém a definição do grid no projeto — ela
+fica lá para quando se voltar atrás. Só que eu contava a linha final dela na hora de
+posicionar os botões, e uma tela de dois campos herdava a linha do grid que a rotina nem
+desenha mais.
+
+Grid na tela principal só é gerado no modo Grid (é o `generateParent` que desvia para
+`app.grid.generateInterface`). Então a linha final do grid agora só entra na conta nesse
+modo:
+
+```
+modo Grid, grid até a linha 21   →  botões na linha 23
+troco para Cadastro              →  botões na linha 4    (campos nas linhas 1,2)
+volto para Grid                  →  botões na linha 23
+```
+
+## Chamada x assinatura: três defeitos
+
+O `2000AG1` que você mostrou repetia argumentos:
+
+```
+set sc=$$GerarGlobalTrabalho^WDCCMOT010RG(CODEMP,CODIGO,CT,%PRG,CODEMP,CODIGO)
+```
+
+Virou checagem automática sobre o acervo — para cada `$$Label^ROTINA(...)`, comparar com a
+assinatura **daquela** rotina: sem argumento repetido, sem parâmetro repetido, e chamada
+nunca com mais argumentos que a assinatura (menos é legítimo; os últimos ficam indefinidos).
+Ela encontrou três coisas.
+
+**1. Chave que também é filtro entrava duas vezes.** Com manutenção no grid, as chaves da
+global entram pelo prefixo persistente do `2000AG1`. O campo que é chave *e* filtro aparecia
+de novo na lista de filtros — dos dois lados, chamada e assinatura:
+
+```
+antes   chamada    (CODEMP,CODIGO,CT,%PRG,CODEMP,CODIGO)
+        assinatura (codEmpresa,codigo,term,rotina,codEmpresa,codigo)
+depois  chamada    (CODEMP,CODIGO,CT,%PRG)
+        assinatura (codEmpresa,codigo,term,rotina)
+```
+
+**2. Parâmetros com o mesmo nome.** A deduplicação era por *variável*, não por parâmetro.
+Três campos de "Perdas" com variáveis `PER`, `PER2` e `PER3` viravam `perdas` três vezes:
+
+```
+antes   (term,rotina,dadosProducao,dadosBobina,operadoresLinha,perdas,perdas,perdas,of)
+depois  (term,rotina,dadosProducao,dadosBobina,operadoresLinha,perdas,perdas2,perdas3,of)
+```
+
+**3. Regressão minha.** Quando fiz a interface sempre passar a variável de dados base em modo
+Cadastro (ela guarda data, hora e operador nos dois primeiros pieces), não fiz o mesmo do
+lado da RG — lá a estrutura base era descartada quando nenhum campo morava nela. Resultado:
+chamada com quatro argumentos, assinatura com três.
+
+```
+antes   assinatura (codEmpresa,wdwdnew04,tabempnatesta)
+        chamada    (CE,WDWDNEW0,WDWDNEW04,.TABEMPNATESTA)
+depois  assinatura (codEmpresa,wdwdnew0,wdwdnew04,tabempnatesta)
+```
+
+Esse é o tipo de erro que não aparece na compilação: o Caché aceita a chamada e o parâmetro
+a mais simplesmente se perde. Por isso a checagem ficou no conjunto que roda a cada mudança.
+
+### Dois alarmes falsos, de novo meus
+
+A primeira versão do verificador acusou 80 divergências de aridade. Nenhuma era real:
+
+- **Vírgula dentro de argumento.** `$piece(VARDET,Z,1)` é *um* argumento, não três — o
+  contador precisa quebrar só nas vírgulas de primeiro nível.
+- **Label com o mesmo nome em RGs diferentes.** `GravarCadastroSequenciaCalculo` existe em
+  três RGs do mesmo projeto, com assinaturas diferentes. Comparar com a primeira que aparece
+  não diz nada; a comparação tem que ser com a rotina que a chamada nomeia.
+
+## Confirmar a linha já gravando na global
+
+Na manutenção em linha, confirmar a linha escreve na **global de trabalho** e o registro só
+chega à global de negócio quando o operador clica em *Salvar*. Para um grid em que incluir a
+linha já é o cadastro, isso é um passo a mais sem função.
+
+Caixa nova, embaixo da manutenção em linha: **Confirmar a linha já grava na global (dispensa
+o Salvar)**. Ligada, a gravação definitiva entra na própria label `4900`, logo depois do
+`GravarGlobalTrabalho`:
+
+```objectscript
+4900	;
+	set sc=$$GravarGlobalTrabalho^WDCCMOT010RG(CT,$piece(VARDET,Z,1),mtempWDCCMOT010)
+	if $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 4999
+	;
+	set sc=$$GravarGrid^WDCCMOT010RG(CODEMP,CT,%PRG,$piece(VARDET,Z,1),CODREG)
+	if $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 4999
+	;
+	set sc=$$GravarMotivo^WDCCMOT010RG(CODEMP,CODIGO,CT)
+	if $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 4999
+```
+
+**A remoção entra junto.** No `3200`, depois do `RemoverGlobalTrabalho` e do `ExcluirLinha`,
+a mesma gravação. Sem isso a linha sumiria da tela e continuaria na global até alguém salvar
+— o oposto do que a opção promete.
+
+A gravação usa o mesmo `Gravar<Entidade>` do botão Salvar, com os mesmos argumentos: é o
+`$$$KillMergeG` da global de trabalho para a de negócio, não um caminho novo. O botão Salvar
+continua existindo e funcionando.
+
+A opção fica por local de grid (principal ou aba, cada um com o seu) e viaja no JSON do
+projeto.
+
+## Casas decimais na coluna do grid
+
+O tipo "Valor / decimal" era fixo em `v3` — três casas, sem escolha. No CSW o número do tipo
+**é** a quantidade de casas, então a lista passou a trazer `v0` a `v4`:
+
+```
+Tipo=v2; Csw=12^Tempo Meta^3
+```
+
+A escolha atravessa tudo: a tag do grid, o tipo de manutenção da coluna (qualquer `vN` é
+decimal) e o `SCALE` da propriedade na classe COS.
+
+## Botão de consulta nascia travado
+
+Com *Usar botão de consultar*, o `9000` emitia `do BtnConsultar^%CSW1D(0)` — desabilitado — e
+não havia nenhuma outra chamada que o liberasse. O botão aparecia e não clicava, em nenhum
+momento da tela.
+
+Fui conferir a convenção em rotinas de produção (`ASALCIB600`, `ASALPV600`, `ASALCCESG135`):
+todas fazem `do BtnConsultar^%CSW1D(1)` logo depois do `Enable^%CSW1UTI()`, no `9000`. É o
+que o gerador emite agora.
+
+## Foco depois dos campos, na tela de grid
+
+Escolher o foco só existia para grid **dentro de aba** (`finalFocus` da aba). Na tela de grid
+direta o `gridFinalFocusMode` abria com `if (!config.gridInTab) return "grid";` — ou seja,
+sempre a primeira linha do grid, sem opção. E mesmo na aba as opções eram só
+Automático/Salvar/Grid/Último campo: nunca dava para apontar **um** campo.
+
+Agora há *Foco depois dos campos* junto das opções da consulta, e a lista é montada a partir
+dos campos da tela:
+
+```
+Automático (grid)      do Focus^%CSW1GRID3(CT,%PRG,1,1)
+Botão Consultar        do Focus^%CSW1UTI(%PRG,"btConsultar",,1)
+Primeira linha do grid do Focus^%CSW1GRID3(CT,%PRG,1,1)
+Último campo           do Focus^%CSW1UTI(%PRG,"cp1100",,1)
+Campo 1000 — Código da Empresa   do Focus^%CSW1UTI(%PRG,"cp1000",,1)
+```
+
+Dois cuidados: apagar o campo escolhido não quebra a geração — cai no automático; e escolher
+*Botão Consultar* com o botão desligado também cai no automático, em vez de mandar foco para
+um `btConsultar` que não existe na tela.

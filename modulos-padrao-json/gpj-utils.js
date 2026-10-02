@@ -50,6 +50,7 @@
     fieldCount: $("#fieldCount"),
     addFieldButton: $("#addFieldButton"),
     loadExampleButton: $("#loadExampleButton"),
+    clearProjectButton: $("#clearProjectButton"),
 
     generatedFilesCount: $("#generatedFilesCount"),
     outputFolderStatus: $("#outputFolderStatus"),
@@ -76,10 +77,16 @@
     generateSave: $("#generateSave"),
     generateDelete: $("#generateDelete"),
     generateLock: $("#generateLock"),
+    lockTimeout: $("#lockTimeout"),
+    generateOwnF7: $("#generateOwnF7"),
+    ownF7DescriptionField: $("#ownF7DescriptionField"),
+    saveOwnF7Button: $("#saveOwnF7Button"),
 
     useBtnManter: $("#useBtnManter"),
     btnManterConfiguration: $("#btnManterConfiguration"),
     btnManterColumn: $("#btnManterColumn"),
+    btnManterAlignment: $("#btnManterAlignment"),
+    btnManterLineAuto: $("#btnManterLineAuto"),
     btnManterLine: $("#btnManterLine"),
     btnManterLocation: $("#btnManterLocation"),
 
@@ -98,6 +105,7 @@
     gridCheckGlobal: $("#gridCheckGlobal"),
     gridEditLabel: $("#gridEditLabel"),
     gridInlineMaintenance: $("#gridInlineMaintenance"),
+    gridInlineSaveOnConfirm: $("#gridInlineSaveOnConfirm"),
     gridMaintenanceOptions: $("#gridMaintenanceOptions"),
     gridAutoButtonPosition: $("#gridAutoButtonPosition"),
     gridAutoButtonPositionSummary: $("#gridAutoButtonPositionSummary"),
@@ -107,10 +115,12 @@
     gridSaveButtonLine: $("#gridSaveButtonLine"),
     gridAllowInsert: $("#gridAllowInsert"),
     gridAllowRemove: $("#gridAllowRemove"),
+    gridAutoSequence: $("#gridAutoSequence"),
     gridRowEnter: $("#gridRowEnter"),
     gridUseConsultButton: $("#gridUseConsultButton"),
     gridConsultButtonColumn: $("#gridConsultButtonColumn"),
     gridConsultButtonLine: $("#gridConsultButtonLine"),
+    gridFinalFocus: $("#gridFinalFocus"),
     gridConsultButtonOptions: $("#gridConsultButtonOptions"),
     gridColumnsTableBody: $("#gridColumnsTableBody"),
     addGridColumnButton: $("#addGridColumnButton"),
@@ -159,6 +169,9 @@
     fieldLookupDisplayCode: $("#fieldLookupDisplayCode"),
     fieldLookupDisplayCodeContainer: $("#fieldLookupDisplayCodeContainer"),
     fieldMultiSelectConfiguration: $("#fieldMultiSelectConfiguration"),
+    fieldMultiSelectSource: $("#fieldMultiSelectSource"),
+    fieldMultiSelectOptionsVariable: $("#fieldMultiSelectOptionsVariable"),
+    fieldMultiSelectOptionsLoad: $("#fieldMultiSelectOptionsLoad"),
     fieldMultiSelectTableVariable: $("#fieldMultiSelectTableVariable"),
     fieldMultiSelectSelectedText: $("#fieldMultiSelectSelectedText"),
     fieldMultiSelectGlobalReference: $("#fieldMultiSelectGlobalReference"),
@@ -257,6 +270,18 @@
       return String(value || "").replace(/[\r\n]/g, " ").trim();
     },
 
+    renderHookLines(source) {
+      const text = String(source || "").replace(/\r\n/g, "\n").replace(/\s+$/, "");
+      if (!text.trim()) return [];
+      const lines = text.split("\n").map((line) => {
+        if (!line.trim()) return "\t;";
+        if (/^[%A-Za-z0-9]+(\t|\()/.test(line) || /^[%0-9][%A-Za-z0-9]*$/.test(line)) return line;
+        return `\t${line.replace(/^\t/, "").replace(/^ +/, "")}`;
+      });
+      lines.push("\t;");
+      return lines;
+    },
+
     parseVariables(value) {
       return String(value || "")
         .split(/[;,\s]+/)
@@ -326,9 +351,13 @@
       generateSave: e.generateSave.checked,
       generateDelete: e.generateDelete.checked,
       generateLock: e.generateLock.checked,
+      lockTimeout: Math.max(0, Number(e.lockTimeout?.value) || 0),
+      generateOwnF7: e.generateOwnF7?.checked === true,
+      ownF7DescriptionFieldId: e.ownF7DescriptionField?.value || "",
 
       useBtnManter: e.useBtnManter.checked,
       btnManterColumn: Number(e.btnManterColumn.value) || 1,
+      btnManterAlignment: e.btnManterAlignment?.value || "left",
       btnManterLine: Number(e.btnManterLine.value) || 1,
       btnManterLocation: e.btnManterLocation.value || "parent",
 
@@ -354,6 +383,9 @@
       gridEditLabel: u.sanitize(e.gridEditLabel.value) || "TbCellClick",
       gridMaintenance: e.gridInlineMaintenance.checked,
       gridInlineMaintenance: e.gridInlineMaintenance.checked,
+      gridInlineSaveOnConfirm: e.gridInlineSaveOnConfirm
+        ? e.gridInlineSaveOnConfirm.checked
+        : false,
       gridAutoButtonPosition: e.gridAutoButtonPosition
         ? e.gridAutoButtonPosition.checked
         : true,
@@ -372,6 +404,7 @@
       gridUseConsultButton: e.gridUseConsultButton?.checked !== false,
       gridConsultButtonColumn: Number(e.gridConsultButtonColumn?.value) || 86,
       gridConsultButtonLine: Number(e.gridConsultButtonLine?.value) || 1,
+      gridFinalFocus: String(e.gridFinalFocus?.value || "auto").trim() || "auto",
 
       customButtons:
         app.customButtons && typeof app.customButtons.all === "function"

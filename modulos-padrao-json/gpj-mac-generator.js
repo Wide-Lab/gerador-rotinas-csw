@@ -5,20 +5,59 @@
   } = app;
 
   function normalizedF7Routine(field) {
+    if (String(field.f7ListLoad || "").trim()) {
+      return `F7${u.normalizeVariable(field.variable)}^${routineForLocation(field.tabId || "parent")}`;
+    }
     return String(field.f7Routine || "")
       .trim()
       .replace(/^,+/, "")
       .replace(/,+$/, "");
   }
 
+  function routineForLocation(locationId) {
+    const config = app.getConfig();
+    if (!locationId || locationId === "parent") return config.routineName;
+    const index = state.tabs.findIndex((tab) => tab.id === locationId);
+    if (index < 0) return config.routineName;
+    return u.normalizeVariable(state.tabs[index].routineName, `${config.routineName}TAB${index + 1}`);
+  }
+
+  function appendListF7Labels(lines, locationId, routineName) {
+    app.fields.mainFields()
+      .filter((field) => (field.tabId || "parent") === locationId && String(field.f7ListLoad || "").trim())
+      .forEach((field) => {
+        const variable = u.normalizeVariable(field.variable);
+        const table = `TABF7${variable}`.slice(0, 31);
+        const titles = u.escapeMac(field.f7ListTitles || `${field.description},Descrição`);
+        const sizes = u.escapeMac(field.f7ListSizes || "8,50");
+        lines.push(`\t; F7 de ${u.sanitize(field.description)}`);
+        lines.push(`F7${variable}\tkill ${table}`);
+        String(field.f7ListLoad).split(/\r?\n/).filter((line) => line.trim()).forEach((line) => {
+          lines.push(`\t${line.trim().split("{table}").join(table)}`);
+        });
+        lines.push(`\tdo ^%CSUTIPE("${sizes}","1","${titles}",${Number(field.f7ListRows) || 15},"${table}(","%codret","%dadret",,,,"F7${variable}PE1^${routineName}")`);
+        lines.push("\tquit:$$CSP^%CSW1UTI()");
+        lines.push(`F7${variable}PE1\tdo SetF7^%CSW1UTI(%codret)`);
+        lines.push("\tquit");
+        lines.push("\t;");
+      });
+  }
+
+  function f8RoutineOf(source) {
+    const clean = String(source?.f8Routine || "").trim().replace(/^,+|,+$/g, "");
+    if (!clean) return "";
+    return clean.includes("^") ? clean : `^${clean}`;
+  }
+
   function controlDefinition(field, cp) {
     const f7Routine = normalizedF7Routine(field);
+    const f8Routine = f8RoutineOf(field);
 
     if (!f7Routine) {
-      return `,,,${cp}`;
+      return `${f8Routine},,,${cp}`;
     }
 
-    return `,${f7Routine},,${cp}`;
+    return `${f8Routine},${f7Routine},,${cp}`;
   }
 
   function standardControlTail(field, cp) {
@@ -126,7 +165,8 @@
     }
 
     if (field.type === "multiSelect") {
-      return `do ^%CSLE(${line},${column},${size},"${reference}",,"@'?.N",,,"${controlDefinition(field, cp)}")`;
+      const mask = field.multiSelectValueType === "string" ? "" : `"@'?.N"`;
+      return `do ^%CSLE(${line},${column},${size},"${reference}",,${mask},,,"${controlDefinition(field, cp)}")`;
     }
 
     if (field.type === "integer") {
@@ -295,6 +335,30 @@
               .length
         );
 
+    app.rg
+      .keyedMultiSelectDefinitions(config)
+      .filter((definition) => definition.field.tabId === locationId)
+      .forEach((definition) => {
+        const condition = definition.keyDefinitions
+          .map((keyDefinition) => `(${keyDefinition.variable}'="")`)
+          .join("&");
+
+        const argumentsList = [
+          ...app.indexes.macArguments(),
+          ...definition.keyDefinitions.map((keyDefinition) => keyDefinition.variable),
+          `.${definition.tableVariable}`
+        ];
+
+        lines.push(
+          `\tset sc=$$${definition.obtainMethod}^${config.rgRoutineName}(${argumentsList.join(",")})`
+        );
+        lines.push(
+          `\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto ${currentLabel}`
+        );
+        lines.push(`\tif ${condition} do 8000`);
+        lines.push("\t;");
+      });
+
     structures.forEach(
       (structure) => {
         const condition =
@@ -340,6 +404,66 @@
     );
   }
 
+  function listEmptyText(field) {
+    return u.escapeMac(field.multiSelectEmptyText ?? "");
+  }
+
+  function savedFromTab(config) {
+    return config.useTabs && config.useBtnManter && (config.btnManterLocation || "parent") !== "parent";
+  }
+
+  function openByKey() {
+    return (app.state.ruleHooks || {}).openByKey === true;
+  }
+
+  function openByKeyKeys() {
+    return app.indexes.macArguments().filter((argument) => argument !== "CE");
+  }
+
+  function openByKeyParameters() {
+    return [...openByKeyKeys(), "FLGFUN", "TABALT", "DISABLE"];
+  }
+
+  function tabsEnabledAfterSave() {
+    return state.tabs
+      .map((tab, index) => ({ tab, position: index + 1 }))
+      .filter(({ tab }) => tab.enableAfterSave === true)
+      .map(({ position }) => position);
+  }
+
+  function callbackRoutineFor(locationId, isTabRoutine, config) {
+    return isTabRoutine
+      ? u.normalizeVariable(
+          state.tabs.find((tab) => tab.id === locationId)?.routineName,
+          config.routineName
+        )
+      : config.routineName;
+  }
+
+  function listMultiSelectComponent(field, label, routine) {
+    const line = Number(field.inputLine) || 1;
+    const column = Number(field.inputColumn) || 1;
+    const size = Number(field.inputSize) || 8;
+    return `do ^%CSUTIMM("${app.fields.multiSelectOptionsVariable(field)}",1,,,,"${app.fields.multiSelectTableVariable(field)}","${u.escapeMac(field.description)}",,,,,,,"${label}MM1^${routine}","${column},${line},${size},${label}^${routine}")`;
+  }
+
+  function appendListMultiSelectOptions(lines, config) {
+    const fields = app.fields.listMultiSelectFields(config);
+    if (!fields.length) return;
+
+    fields.forEach((field) => {
+      const load = String(field.multiSelectOptionsLoad || "").trim();
+      lines.push(`\t; Opções de ${u.sanitize(field.description)}`);
+      if (load) {
+        load.split(/\r?\n/).forEach((line) => lines.push(`\t${line.trim()}`));
+      } else {
+        lines.push(`\t; TODO: carregar ${app.fields.multiSelectOptionsVariable(field)}(codigo)="codigo-descrição"`);
+      }
+    });
+
+    lines.push("\t;");
+  }
+
   function routineVariables(
     config
   ) {
@@ -370,7 +494,14 @@
           );
         }
 
-        if (app.fields.isMultiSelect(field)) {
+        if (app.fields.isListMultiSelect(field)) {
+          variables.add(
+            app.fields.multiSelectTableVariable(field)
+          );
+          variables.add(
+            app.fields.multiSelectOptionsVariable(field)
+          );
+        } else if (app.fields.isMultiSelect(field)) {
           variables.add(
             app.fields.multiSelectInputVariable(field)
           );
@@ -401,6 +532,10 @@
             variables.add(variable)
         );
 
+        if (String(field.f7ListLoad || "").trim()) {
+          variables.add(`TABF7${u.normalizeVariable(field.variable)}`.slice(0, 31));
+        }
+
         if (app.fields.usesTypedReader(field)) {
           variables.add(app.fields.typedReaderConfigVariable(field));
         }
@@ -423,6 +558,7 @@
     if (config.useTabs) {
       variables.add("CONTINUE");
       variables.add("CODEMP");
+      if (tabsEnabledAfterSave().length) variables.add("FLGNOVO");
 
       if (app.grid && typeof app.grid.sharedVariablesForTabs === "function") {
         app.grid.sharedVariablesForTabs(config).forEach((variable) =>
@@ -543,8 +679,16 @@
       });
 
     app.fields.multiSelectFields(config).forEach((field) => {
+      if (app.fields.isListMultiSelect(field)) return;
       reset.add(app.fields.multiSelectInputVariable(field));
     });
+
+    app.fields.mainFields()
+      .filter((field) => app.fields.isGridTabField(field) && !app.fields.isMultiSelect(field))
+      .forEach((field) => {
+        const variable = u.normalizeVariable(field.variable);
+        if (variable !== "CODEMP") reset.add(variable);
+      });
 
     if (config.useTabs) {
       reset.add("CONTINUE");
@@ -590,12 +734,19 @@
       );
     }
 
-    if (reset.size) {
+    const keyArguments = app.indexes.macArguments();
+    const lastKey = keyArguments[keyArguments.length - 1];
+    const byKey = openByKey() && config.useRules && config.generateObtain && keyArguments.length > 0;
+    const keptKeys = byKey ? [...reset].filter((variable) => keyArguments.includes(variable)) : [];
+    const cleared = [...reset].filter((variable) => !keptKeys.includes(variable));
+
+    if (cleared.length) {
       lines.push(
-        `\tset (${[
-          ...reset
-        ].join(",")})=""`
+        `\tset (${cleared.join(",")})=""`
       );
+    }
+    if (keptKeys.length) {
+      lines.push(`\tif 'FLGFUN,'DISABLE set (${keptKeys.join(",")})=""`);
     }
 
     app.fields.multiSelectTableVariables(config).forEach((variable) => {
@@ -608,6 +759,18 @@
     );
 
     lines.push("\t;");
+
+    if (byKey) {
+      lines.push(`\tif FLGFUN!DISABLE,${lastKey}'="" goto 0600`);
+      lines.push("\t;");
+    }
+
+    const parentKeys = app.fields.mainFields().filter(
+      (field) => (field.tabId || "parent") === "parent" && app.fields.isKeyField(field)
+    );
+    if (!parentKeys.length && keyArguments.length) {
+      appendAfterParentKeys(lines, config, "9999");
+    }
   }
 
   function appendAfterParentKeys(
@@ -635,16 +798,27 @@
     if (
       config.generateObtain
     ) {
+      if (openByKey()) {
+        lines.push("\t; Carregar registro (também quando aberta pelo Editar/Visualizar)");
+      }
       lines.push(
-        `\tset sc=$$Obter${config.entityName}^${config.rgRoutineName}(${[
+        `${openByKey() ? "0600" : ""}\tset sc=$$Obter${config.entityName}^${config.rgRoutineName}(${[
           ...keyArguments,
           ...dataArguments,
           ...rgMultiSelectArguments(config, true)
         ].join(",")})`
       );
 
+      if (openByKey()) {
+        lines.push("\tif $$$ISERR(sc),FLGFUN!DISABLE do ME^%CSUTICSP(sc) goto 9999");
+      }
+
+      if (tabsEnabledAfterSave().length) {
+        lines.push("\tset FLGNOVO=$$$ISERR(sc)");
+      }
+
       lines.push(
-        `\tif $$$ISERR(sc) do Inicializar${config.entityName}^${config.rgRoutineName}(${[
+        `\tif $$$ISERR(sc) set sc=$$Inicializar${config.entityName}^${config.rgRoutineName}(${[
           ...keyArguments,
           ...dataArguments,
           ...rgMultiSelectArguments(config, true)
@@ -658,11 +832,11 @@
       config.generateLock
     ) {
       lines.push(
-        `\tset sc=$$Lock${config.entityName}^${config.rgRoutineName}(${keyArguments.join(",")})`
+        `\t${openByKey() ? "if 'DISABLE " : ""}set sc=$$Lock${config.entityName}^${config.rgRoutineName}(${keyArguments.join(",")})`
       );
 
       lines.push(
-        `\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto ${currentLabel}`
+        `\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto ${openByKey() ? `9999:FLGFUN!DISABLE,${currentLabel}` : currentLabel}`
       );
 
       lines.push("\t;");
@@ -685,19 +859,20 @@
     lines.push("\t;");
 
     if (config.useTabs) {
+      const unlessView = openByKey() ? "if 'DISABLE " : "";
       lines.push(
-        '\tdo HabBotGeral^%CSW1("btSalvar",1)'
+        `\t${unlessView}do HabBotGeral^%CSW1("btSalvar",1)`
       );
 
       if (config.generateSaveAnother) {
         lines.push(
-          '\tdo HabBotGeral^%CSW1("btSalvarNovo",1)'
+          `\t${unlessView}do HabBotGeral^%CSW1("btSalvarNovo",1)`
         );
       }
 
       if (config.generateDelete) {
         lines.push(
-          '\tdo HabBotGeral^%CSW1("btExcluir",1)'
+          `\t${unlessView}do HabBotGeral^%CSW1("btExcluir",1)`
         );
       }
 
@@ -740,10 +915,16 @@
         label,
         step
       }) => {
+        const skipRead = (entry) =>
+          entry.field.disabled === true && !app.fields.isKeyField(entry.field);
+        const previousEntry = entries
+          .slice(0, index)
+          .reverse()
+          .find((entry) => !skipRead(entry));
         const previous =
-          index === 0
-            ? "9999"
-            : entries[index - 1].label;
+          previousEntry
+            ? previousEntry.label
+            : "9999";
 
         const reference =
           app.fields.reference(
@@ -760,6 +941,21 @@
         lines.push(
           `${label}\t;`
         );
+
+        if (skipRead({ field })) {
+          const nextEntry = entries[index + 1];
+          lines.push(`\tset sc=$$Valcp${label}()`);
+          lines.push(`\tgoto ${nextEntry ? nextEntry.label : "2999"}`);
+          lines.push(
+            app.fields.hasDisplay(field)
+              ? `${label}ON\tdo ClearCp^%CSW1UTI("ds${label}")`
+              : `${label}ON\t;`
+          );
+          lines.push(`\t${component(field, label, reference)}`);
+          lines.push("\tquit");
+          lines.push("\t;");
+          return;
+        }
 
         const decimalInitialization = decimalInitializeLine(field, label, reference);
 
@@ -789,6 +985,10 @@
               reference
             )}`
           );
+        } else if (app.fields.isListMultiSelect(field)) {
+          lines.push(
+            `${label}ON\t${listMultiSelectComponent(field, label, callbackRoutineFor(locationId, isTabRoutine, config))}`
+          );
         } else {
           lines.push(
             `${label}ON\t${component(
@@ -805,12 +1005,16 @@
 
         lines.push("\t;");
 
+        const exitLabel = app.fields.isListMultiSelect(field)
+          ? `${label}MM1`
+          : `${label}EX`;
+
         lines.push(
-          index === 0
+          !previousEntry
             ? isTabRoutine
-              ? `${label}EX\tgoto 9999:%=27,0500:(%=140)`
-              : `${label}EX\tgoto 9999:%=27!(%=140)`
-            : `${label}EX\tgoto 9999:%=27,${previous}:%=140`
+              ? `${exitLabel}\tgoto 9999:%=27,0500:(%=140)`
+              : `${exitLabel}\tgoto 9999:%=27!(%=140)`
+            : `${exitLabel}\tgoto 9999:%=27,${previous}:%=140`
         );
 
         lines.push("\t;");
@@ -836,7 +1040,7 @@
           lines.push("\t;");
         }
 
-        if (app.fields.isMultiSelect(field)) {
+        if (app.fields.isMultiSelect(field) && !app.fields.isListMultiSelect(field)) {
           const tableVariable =
             app.fields.multiSelectTableVariable(field);
           const nextLabel =
@@ -951,6 +1155,10 @@
       `\tdo HabilitarTabAll^%CSW1A("${config.sheetId}")`
     );
 
+    tabsEnabledAfterSave().forEach((position) => {
+      lines.push(`\tif $get(FLGNOVO) do desabilitarTab^%CSW1A("${config.sheetId}",${position})`);
+    });
+
     lines.push("\t;");
 
     lines.push(
@@ -988,6 +1196,8 @@
 
     if (config.useTabs) {
       state.tabs.forEach((tab, index) => {
+        if (tab.contentType === "grid" && tab.saveFields !== true) return;
+        if (tab.validateOnSave === false) return;
         lines.push(
           `\tif '$$validateTab^%CSW1A("${config.sheetId}",${index + 1}) quit`
         );
@@ -1021,11 +1231,13 @@
       );
 
       lines.push(
-        `\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto ${
-          config.useTabs
-            ? "1999"
-            : "3000EX"
-        }`
+        savedFromTab(config)
+          ? "\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit"
+          : `\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto ${
+              config.useTabs
+                ? "1999"
+                : "3000EX"
+            }`
       );
 
       lines.push("\t;");
@@ -1045,18 +1257,26 @@
             );
 
             lines.push(
-              `\tif $get(${definition.flagVariable}),$$$ISERR(sc) do ME^%CSUTICSP(sc) goto 1999`
+              `\tif $get(${definition.flagVariable}),$$$ISERR(sc) do ME^%CSUTICSP(sc) ${savedFromTab(config) ? "quit" : "goto 1999"}`
             );
 
             lines.push("\t;");
           });
       }
 
+      lines.push(...u.renderHookLines((app.state.ruleHooks || {}).afterSaveCode));
+
       lines.push(
         '\tdo MECABECALHO^%CSW1UTI("Registro salvo com sucesso!")'
       );
 
       lines.push("\t;");
+
+      if (openByKey() && app.indexes.macArguments().length) {
+        const keys = app.indexes.macArguments();
+        lines.push(`\tset TABALT(${keys[keys.length - 1]})=""`);
+        lines.push("\t;");
+      }
 
       if (
         !config.useTabs &&
@@ -1081,15 +1301,22 @@
             .macArguments()
             .join(",");
 
+        const displayOnlyKeys = new Set(
+          app.fields.mainFields()
+            .filter((field) => app.fields.isKeyField(field) && field.disabled === true)
+            .map((field) => u.normalizeVariable(field.variable))
+        );
         const keyVariables =
           rgSaveKeyArguments(
             config
-          );
+          ).filter((variable) => !displayOnlyKeys.has(variable));
 
         lines.push("\t;");
 
         lines.push(
-          "\tif $get(CONTINUE) do  goto 0500"
+          savedFromTab(config)
+            ? "\tif $get(CONTINUE) do  quit"
+            : "\tif $get(CONTINUE) do  goto 0500"
         );
 
         if (
@@ -1112,12 +1339,40 @@
         lines.push(
           "\t. set CONTINUE=0"
         );
+
+        if (savedFromTab(config)) {
+          lines.push(
+            `\t. do execLabelTabPanel^%CSW1A("${config.sheetId}","0500^${config.routineName}")`
+          );
+        }
       }
 
       lines.push("\t;");
-      lines.push(
-        "\tgoto 0500"
-      );
+
+      const afterSaveTabs = tabsEnabledAfterSave();
+      if (afterSaveTabs.length) {
+        lines.push("\tset FLGNOVO=0");
+        if (savedFromTab(config)) {
+          lines.push(`\tdo execLabelTabPanel^${"%CSW1A"}("${config.sheetId}","2990^${config.routineName}")`);
+          lines.push("\tquit");
+          lines.push("\t;");
+          lines.push("\t; Liberar as abas depois do primeiro Salvar");
+          lines.push(`2990\tdo HabilitarTabAll^%CSW1A("${config.sheetId}")`);
+          lines.push("\t;");
+          lines.push("\tgoto 2000");
+        } else {
+          lines.push(`\tdo HabilitarTabAll^%CSW1A("${config.sheetId}")`);
+          lines.push("\t;");
+          lines.push("\tgoto 2000");
+        }
+      } else if (savedFromTab(config)) {
+        lines.push(`\tdo execLabelTabPanel^%CSW1A("${config.sheetId}","0500^${config.routineName}")`);
+        lines.push("\tquit");
+      } else {
+        lines.push(
+          "\tgoto 0500"
+        );
+      }
 
       lines.push("\t;");
 
@@ -1182,6 +1437,19 @@
             field,
             config
           );
+
+        if (app.fields.isListMultiSelect(field)) {
+          const tableVariable =
+            app.fields.multiSelectTableVariable(field);
+          const selectedText =
+            u.escapeMac(field.multiSelectSelectedText || "Selecionados");
+
+          lines.push(
+            `\tdo Set^%CSW1UTI(%PRG,"cp${label}MM1",$select($data(${tableVariable}):"${selectedText}",1:"${listEmptyText(field)}"))`
+          );
+
+          return;
+        }
 
         if (app.fields.isMultiSelect(field)) {
           const tableVariable =
@@ -1468,6 +1736,9 @@
     config,
     tab
   ) {
+    const hooks = (tab.hooks && typeof tab.hooks === "object") ? tab.hooks : {};
+    lines.push(...u.renderHookLines(hooks.interfaceCode));
+
     lines.push(
       "\t; Tela"
     );
@@ -1494,8 +1765,22 @@
     }
 
     appendDisabledControls(lines, config, tab.id);
+    appendViewOnly(lines, tab.id);
+    lines.push(...u.renderHookLines(hooks.screenCode));
 
     lines.push("\tquit");
+    lines.push("\t;");
+  }
+
+  function appendViewOnly(lines, locationId) {
+    if (!openByKey()) return;
+    lines.push("\tif $get(DISABLE) do Disable^%CSW1UTI()");
+    if (app.customButtons) {
+      app.customButtons.buttonsForLocation(locationId).forEach((button, index) => {
+        const id = String(button.buttonId || `btPersonalizado${index + 1}`);
+        lines.push(`\tif $get(DISABLE) do HabBotGeral^%CSW1("${id}",0)`);
+      });
+    }
     lines.push("\t;");
   }
 
@@ -1572,8 +1857,8 @@
       config.generateDelete
     ) {
       const args =
-        app.indexes
-          .macArguments()
+        app.rg
+          .deleteMacArguments(config)
           .join(",");
 
       lines.push(
@@ -1753,12 +2038,34 @@
           `Valcp${label}()\t;`
         );
 
-        if (field.required && !app.fields.isMultiSelect(field)) {
+        if (app.fields.isListMultiSelect(field)) {
+          const tableVariable = app.fields.multiSelectTableVariable(field);
+          const selectedText = u.escapeMac(field.multiSelectSelectedText || "Selecionados");
+
+          if (field.required) {
+            lines.push(
+              `\tif '$data(${tableVariable}) do ME^%CSUTIUD("${u.escapeMac(
+                field.description
+              )}: Campo obrigatório!") quit 0`
+            );
+            lines.push("\t;");
+          }
+
           lines.push(
-            `\tif ${reference}="" do ME^%CSUTIUD("${u.escapeMac(
-              field.description
-            )}: Campo obrigatório!") quit 0`
+            `\tdo Set^%CSW1UTI(%PRG,"cp${label}MM1",$select($data(${tableVariable}):"${selectedText}",1:"${listEmptyText(field)}"))`
           );
+          lines.push("\t;");
+          lines.push("\tquit $$$OK");
+          lines.push("\t;");
+          return;
+        }
+
+        const requiredLine = `if ${reference}="" do ME^%CSUTIUD("${u.escapeMac(
+          field.description
+        )}: Campo obrigatório!") quit 0`;
+
+        if (field.required && !app.fields.isMultiSelect(field)) {
+          lines.push(`\t${requiredLine}`);
 
           lines.push("\t;");
         }
@@ -1767,7 +2074,15 @@
           field,
           label,
           config
+        ).filter(
+          (line) =>
+            !(field.required && !app.fields.isMultiSelect(field) &&
+              line.trim() === requiredLine)
         );
+
+        while (customValcpLines.length && customValcpLines[0].trim() === ";") {
+          customValcpLines.shift();
+        }
 
         if (customValcpLines.length) {
           customValcpLines.forEach((line) => {
@@ -1807,9 +2122,12 @@
     );
 
     entries.forEach(
-      ({ label }) => {
+      ({ field, label }) => {
+        const control = app.fields.isListMultiSelect(field)
+          ? `cp${label}MM1`
+          : `cp${label}`;
         lines.push(
-          `\tif '$$Valcp${label}() do Focus^%CSW1UTI(%PRG,"cp${label}") quit 0`
+          `\tif '$$Valcp${label}() do Focus^%CSW1UTI(%PRG,"${control}") quit 0`
         );
       }
     );
@@ -1902,8 +2220,9 @@
           nextColumn += 15;
         }
 
+        const cancelLabel = (app.state.ruleHooks || {}).cancelCloses === true ? "9999" : "0500";
         lines.push(
-          `\t; csw:botao:${nextColumn},${line},btCancelar,<u>C</u>ancelar,c,0500^${actionRoutine},back,,14`
+          `\t; csw:botao:${nextColumn},${line},btCancelar,<u>C</u>ancelar,c,${cancelLabel}^${config.routineName},back,,14`
         );
       } else {
         lines.push(
@@ -2003,8 +2322,11 @@
       `ROUTINE ${config.routineName}`
     );
 
+    const parameters = openByKey() ? openByKeyParameters() : [];
+    const localVariables = variables.filter((variable) => !parameters.includes(variable));
+
     lines.push(
-      `${config.routineName}\t; ${month}/${year} - ${u.escapeMac(
+      `${config.routineName}${parameters.length ? `(${parameters.join(",")})` : ""}\t; ${month}/${year} - ${u.escapeMac(
         config.title
       )} <#ROTINA GERADA AUTOMATICAMENTE#>`
     );
@@ -2017,13 +2339,13 @@
     lines.push("\t;");
 
     lines.push(
-      `0000\tdo New^%CSW1UTI("${variables.join(",")}")`
+      `0000\tdo New^%CSW1UTI("${localVariables.join(",")}")`
     );
 
     lines.push("\t;");
 
     lines.push(
-      `\tnew ${variables.join(",")}`
+      `\tnew ${localVariables.join(",")}`
     );
 
     lines.push("\t;");
@@ -2036,9 +2358,21 @@
       "\tset CT=%index"
     );
 
-    lines.push(
-      "\tset CODEMP=CE"
-    );
+    if (parameters.length) {
+      openByKeyKeys().forEach((argument) => {
+        lines.push(`\tset ${argument}=$get(${argument})`);
+      });
+      if (openByKeyKeys().includes("CODEMP")) lines.push("\tif CODEMP=\"\" set CODEMP=CE");
+      else if (localVariables.includes("CODEMP")) lines.push("\tset CODEMP=CE");
+      lines.push("\tset FLGFUN=+$get(FLGFUN)");
+      lines.push("\tset DISABLE=+$get(DISABLE)");
+      lines.push("\t;");
+      lines.push("\tkill TABALT");
+    } else if (localVariables.includes("CODEMP")) {
+      lines.push(
+        "\tset CODEMP=CE"
+      );
+    }
 
     lines.push("\t;");
 
@@ -2083,6 +2417,11 @@
 
       lines.push("\t;");
     }
+
+    appendListMultiSelectOptions(
+      lines,
+      config
+    );
 
     appendGeneratedOptionTables(
       lines,
@@ -2135,6 +2474,10 @@
     if (app.customButtons) {
       app.customButtons.appendActions(lines, config, "parent", config.routineName);
     }
+
+    appendListF7Labels(lines, "parent", config.routineName);
+
+    lines.push(...u.renderHookLines((app.state.ruleHooks || {}).interfaceCode));
 
     appendValidations(
       lines,
@@ -2214,6 +2557,11 @@
 
     lines.push("\t;");
 
+    if (openByKey()) {
+      lines.push("\tif $get(DISABLE) quit");
+      lines.push("\t;");
+    }
+
     appendFields(
       lines,
       config,
@@ -2250,6 +2598,8 @@
     if (app.customButtons) {
       app.customButtons.appendActions(lines, config, tab.id, routineName);
     }
+
+    appendListF7Labels(lines, tab.id, routineName);
 
     appendValidations(
       lines,
@@ -3184,11 +3534,420 @@
         });
     }
 
+    if (
+      app.customButtons &&
+      typeof app.customButtons.duplicateScreenDefinitions === "function"
+    ) {
+      app.customButtons
+        .duplicateScreenDefinitions(config)
+        .forEach((definition) => {
+          result[`duplicate-${definition.button.id}`] = {
+            label: `Tela de duplicação ${definition.routineName}`,
+            routineName: definition.routineName,
+            code: generateDuplicateScreen(definition, config)
+          };
+        });
+    }
+
+    if (
+      app.customButtons &&
+      typeof app.customButtons.justifyScreenDefinitions === "function"
+    ) {
+      app.customButtons
+        .justifyScreenDefinitions(config)
+        .forEach((definition) => {
+          result[`justify-${definition.button.id}`] = {
+            label: `Tela de justificativa ${definition.routineName}`,
+            routineName: definition.routineName,
+            code: generateJustifyScreen(definition, config)
+          };
+        });
+    }
+
     if (app.f7 && typeof app.f7.generateAll === "function") {
       Object.assign(result, app.f7.generateAll(config));
     }
 
     return result;
+  }
+
+  function generateInputScreen(definition, config) {
+    const now = new Date();
+    const period = `${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`;
+    const routine = definition.routineName;
+    const title = u.escapeMac(definition.title);
+    const parameters = definition.parameters.map((item) => u.normalizeVariable(item)).filter(Boolean);
+    const fields = definition.fields.map((field, index) => ({
+      ...field,
+      label: String(1000 + index * 100),
+      variable: u.normalizeVariable(field.variable, `CAMPO${index + 1}`),
+      line: Number(field.line) || index * 2 + 1,
+      column: Number(field.column) || 15,
+      labelSize: Number(field.labelSize) || 13,
+      size: Number(field.size) || 10
+    }));
+    const fieldVariables = fields.map((field) => field.variable);
+    const extra = u.parseVariables(definition.extraVariables);
+    const variables = [...new Set(["sc", "CT", "%PRG", ...fieldVariables, ...extra])].filter((variable) => !parameters.includes(variable));
+    const height = Math.max(8, Math.max(...fields.map((field) => field.line)) + 5);
+    const width = Number(definition.width) || 70;
+    const rule = definition.rule || "TODO";
+    const lines = [];
+
+    lines.push(`ROUTINE ${routine}`);
+    lines.push(`${routine}(${parameters.join(",")})\t; ${period} - ${title}`);
+    lines.push("\t;");
+    lines.push("\t#include %CSUTICSP");
+    lines.push("\t;");
+    lines.push(`0000\tdo New^%CSW1UTI("${variables.join(",")}")`);
+    lines.push(`\tnew ${variables.join(",")}`);
+    lines.push("\t;");
+    lines.push(`\tset %PRG="${routine}"`);
+    lines.push("\tset CT=%index");
+    lines.push("\t;");
+    lines.push("\tset sc=$$ValidarExecucaoCSW^%CSUTIRG001()");
+    lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit");
+    lines.push("\t;");
+    lines.push(`\t; csw:aj:${width},${height},${title}`);
+    lines.push(`\tdo AJ^%CSUTIUD(${width},${height},"${title}")`);
+    lines.push("\t;");
+    lines.push(`0500\tset (${fieldVariables.join(",")})=""`);
+    fields
+      .filter((field) => String(field.defaultValue ?? "") !== "")
+      .forEach((field) => lines.push(`\tset ${field.variable}=${field.defaultValue}`));
+    lines.push("\t;");
+    lines.push("\tdo 9000,8000");
+    lines.push("\t;");
+
+    fields.forEach((field, index) => {
+      const previous = index === 0 ? "9999" : fields[index - 1].label;
+      const next = index === fields.length - 1 ? "2999" : fields[index + 1].label;
+      const mask = field.type === "integer" ? '"@\'?.N"' : "";
+      const lookup = String(field.f7Routine || "").trim();
+      const f8 = String(field.f8Routine || "").trim();
+      lines.push(`\t; ${u.sanitize(field.description)}`);
+      lines.push(`${field.label}\t;`);
+      if (field.hasDisplay) lines.push(`${field.label}ON\tdo ClearCp^%CSW1UTI("ds${field.label}")`);
+      lines.push(`${field.hasDisplay ? "" : `${field.label}ON`}\tdo ^%CSLE(${field.line},${field.column},${field.size},"${field.variable}",${field.variable},${mask},${field.required ? 1 : ""},,"${f8},${lookup},,cp${field.label}")`);
+      lines.push("\tquit:$$CSP^%CSW1UTI()");
+      lines.push("\t;");
+      lines.push(`${field.label}EX\tgoto 9999:%=27${index ? `,${previous}:%=140` : ""}`);
+      lines.push("\t;");
+      lines.push(`\tif '$$Valcp${field.label}() goto ${field.label}`);
+      lines.push("\t;");
+      lines.push(`\tgoto ${next}`);
+      lines.push("\t;");
+    });
+
+    lines.push('2999\tdo Focus^%CSW1UTI(%PRG,"btConfirmar") quit');
+    lines.push("\t;");
+    lines.push("\t; Confirmar");
+    lines.push("3000\tif '$$Validate() quit");
+    lines.push("\t;");
+    if (definition.rule) {
+      lines.push(`\tset sc=$$${rule}^${config.rgRoutineName}(${[...parameters, ...fieldVariables].join(",")})`);
+      lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit");
+    } else {
+      lines.push("\t; TODO: informar justifyRule no botão para chamar a regra com os campos.");
+    }
+    lines.push("\t;");
+    lines.push("\tgoto 9999");
+    lines.push("\t;");
+    lines.push("\t; Mostrar Dados");
+    lines.push("8000\t;");
+    fields.forEach((field) => {
+      lines.push(`\tdo Set^%CSW1UTI(%PRG,"cp${field.label}",${field.variable})`);
+    });
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+    lines.push("\t; Tela");
+    lines.push("9000\tdo Clear^%CSW1UTI()");
+    lines.push("\tdo Enable^%CSW1UTI()");
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+    lines.push("\t; Fim");
+    lines.push("9999\tdo FJ^%CSUTIUD");
+    lines.push("\tdo FJ^%CSW1UTI");
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+
+    fields.forEach((field) => {
+      lines.push(`\t; Método Valcp${field.label}()`);
+      lines.push(`Valcp${field.label}()\t;`);
+      if (field.required) {
+        lines.push(`\tif ${field.variable}="" do ME^%CSUTIUD("${u.escapeMac(field.description)}: Campo obrigatório!") quit 0`);
+      }
+      u.renderHookLines(field.valcpCode).forEach((line) => lines.push(line));
+      lines.push("\t;");
+      lines.push("\tquit $$$OK");
+      lines.push("\t;");
+    });
+
+    lines.push("\t; Método Validate()");
+    lines.push("Validate()\t;");
+    fields.forEach((field) => {
+      lines.push(`\tif '$$Valcp${field.label}() do Focus^%CSW1UTI(%PRG,"cp${field.label}") quit 0`);
+    });
+    lines.push("\t;");
+    lines.push("\tquit $$$OK");
+    lines.push("\t;");
+    lines.push("\t; Método Show");
+    lines.push("Show(%cswP1,%cswP2,%cswP3,%cswP4)\t;");
+    lines.push(`\tdo Show^%CSW1UTI("${routine}",$get(%cswP1),$get(%cswP2),$get(%cswP3),$get(%cswP4))`);
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+    lines.push("\t; Tags CSW");
+    lines.push("\t;");
+    fields.forEach((field) => {
+      lines.push(`\t; csw:label:1,${field.line},${field.labelSize},${u.escapeMac(field.description)}${field.required ? "*" : ""}`);
+      if (field.hasDisplay) {
+        lines.push(`\t; csw:display:${field.column + field.size + 2},${field.line},${Number(field.displaySize) || 30},ds${field.label}`);
+      }
+    });
+    lines.push("\t;");
+    lines.push(`\t; csw:botao:15,${height - 2},btConfirmar,C<u>o</u>nfirmar,o,3000^${routine},check,Confirmar,15`);
+    lines.push(`\t; csw:botao:31,${height - 2},btCancelar,<u>C</u>ancelar,c,9999^${routine},cancelar,Cancelar,15`);
+    lines.push("\t;");
+    lines.push(`\t; csw:labelcreate:${routine}`);
+    lines.push("\t; csw:labeldestroy:9999");
+    lines.push("\t; csw:csp:gerar");
+
+    return lines.join("\n");
+  }
+
+  function generateJustifyScreen(definition, config) {
+    if (Array.isArray(definition.fields) && definition.fields.length) {
+      return generateInputScreen(definition, config);
+    }
+    const now = new Date();
+    const period = `${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`;
+    const routine = definition.routineName;
+    const title = u.escapeMac(definition.title);
+    const fieldLabel = u.escapeMac(definition.fieldLabel);
+    const parameters = definition.parameters.map((item) => u.normalizeVariable(item)).filter(Boolean);
+    const variables = ["sc", "CT", "%PRG", "JUSTIF"].filter((variable) => !parameters.includes(variable));
+    const rule = definition.rule || "TODO";
+    const lines = [];
+
+    lines.push(`ROUTINE ${routine}`);
+    lines.push(`${routine}(${parameters.join(",")})\t; ${period} - ${title}`);
+    lines.push("\t;");
+    lines.push("\t#include %CSUTICSP");
+    lines.push("\t;");
+    lines.push(`0000\tdo New^%CSW1UTI("${variables.join(",")}")`);
+    lines.push(`\tnew ${variables.join(",")}`);
+    lines.push("\t;");
+    lines.push(`\tset %PRG="${routine}"`);
+    lines.push("\tset CT=%index");
+    lines.push("\t;");
+    lines.push("\tset sc=$$ValidarExecucaoCSW^%CSUTIRG001()");
+    lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit");
+    lines.push("\t;");
+    lines.push(`\t; csw:aj:70,10,${title}`);
+    lines.push(`\tdo AJ^%CSUTIUD(70,10,"${title}")`);
+    lines.push("\t;");
+    lines.push('0500\tset JUSTIF=""');
+    lines.push("\t;");
+    lines.push("\tdo 9000");
+    lines.push("\t;");
+    lines.push(`\t; ${u.sanitize(definition.fieldLabel)}`);
+    lines.push(`1000ON\tdo ^%CSW1UTITXTAREA(1,15,${definition.maxLength},"JUSTIF",JUSTIF,,",cp1000,,,1",54,5,0)`);
+    lines.push("\tquit:$$CSP^%CSW1UTI()");
+    lines.push("\t;");
+    lines.push("1000EX\tgoto 9999:%=27");
+    lines.push("\t;");
+    lines.push("\tif '$$Valcp1000() goto 1000ON");
+    lines.push("\t;");
+    lines.push('2999\tdo Focus^%CSW1UTI(%PRG,"btConfirmar") quit');
+    lines.push("\t;");
+    lines.push("\t; Confirmar");
+    lines.push("3000\tif '$$Valcp1000() quit");
+    lines.push("\t;");
+    if (definition.rule) {
+      lines.push(`\tset sc=$$${rule}^${config.rgRoutineName}(${[...parameters, "JUSTIF"].join(",")})`);
+      lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit");
+    } else {
+      lines.push("\t; TODO: informar justifyRule no botão para chamar a regra com a justificativa.");
+    }
+    lines.push("\t;");
+    lines.push("\tgoto 9999");
+    lines.push("\t;");
+    lines.push("\t; Tela");
+    lines.push("9000\tdo Clear^%CSW1UTI()");
+    lines.push("\tdo Enable^%CSW1UTI()");
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+    lines.push("\t; Fim");
+    lines.push("9999\tdo FJ^%CSUTIUD");
+    lines.push("\tdo FJ^%CSW1UTI");
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+    lines.push("\t; Método Valcp1000()");
+    lines.push("Valcp1000()\t;");
+    lines.push(`\tif $translate(JUSTIF," ")="" do ME^%CSUTIUD("${fieldLabel}: Campo obrigatório!") quit 0`);
+    lines.push("\t;");
+    lines.push("\tquit $$$OK");
+    lines.push("\t;");
+    lines.push("\t; Método Show");
+    lines.push("Show(%cswP1,%cswP2,%cswP3,%cswP4)\t;");
+    lines.push(`\tdo Show^%CSW1UTI("${routine}",$get(%cswP1),$get(%cswP2),$get(%cswP3),$get(%cswP4))`);
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+    lines.push("\t; Tags CSW");
+    lines.push("\t;");
+    lines.push(`\t; csw:label:1,1,13,${fieldLabel}*`);
+    lines.push("\t;");
+    lines.push(`\t; csw:botao:15,8,btConfirmar,C<u>o</u>nfirmar,o,3000^${routine},check,Confirmar,15`);
+    lines.push(`\t; csw:botao:31,8,btCancelar,<u>C</u>ancelar,c,9999^${routine},cancelar,Cancelar,15`);
+    lines.push("\t;");
+    lines.push(`\t; csw:labelcreate:${routine}`);
+    lines.push("\t; csw:labeldestroy:9999");
+    lines.push("\t; csw:csp:gerar");
+
+    return lines.join("\n");
+  }
+
+  function generateDuplicateScreen(definition, config) {
+    const now = new Date();
+    const period = `${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`;
+    const routine = definition.routineName;
+    const target = definition.targetVariable;
+    const description = `${definition.keyDescription} Destino`;
+    const labelSize = Math.max(15, description.length + 1);
+    const inputColumn = labelSize + 2;
+    const size = Number(definition.keyField.inputSize) || 6;
+    const field = {
+      ...definition.keyField,
+      id: `duplicate-${definition.button.id}`,
+      variable: target,
+      description,
+      tabId: "parent",
+      isKey: true,
+      tabKey: false,
+      required: true,
+      labelColumn: 1,
+      labelLine: 1,
+      labelSize,
+      inputColumn,
+      inputLine: 1,
+      inputSize: size,
+      displayColumn: inputColumn + size + 2,
+      displayLine: 1,
+      displaySize: 30
+    };
+    const hasDisplay = app.fields.hasDisplay(field);
+    const width = Math.max(60, field.displayColumn + (hasDisplay ? 32 : 2));
+    const variables = [
+      "sc",
+      "CT",
+      "%PRG",
+      target,
+      ...u.parseVariables(definition.keyField.extraVariables)
+    ].filter((variable, position, all) =>
+      variable !== definition.keyVariable && all.indexOf(variable) === position
+    );
+    const ruleArguments = [
+      ...app.indexes.macArguments(),
+      target
+    ];
+    const lines = [];
+
+    lines.push(`ROUTINE ${routine}`);
+    lines.push(`${routine}(${definition.keyVariable})\t; ${period} - ${u.escapeMac(definition.title)}`);
+    lines.push("\t;");
+    lines.push("\t#include %CSUTICSP");
+    lines.push("\t;");
+    lines.push(`0000\tdo New^%CSW1UTI("${variables.join(",")}")`);
+    lines.push(`\tnew ${variables.join(",")}`);
+    lines.push("\t;");
+    lines.push(`\tset %PRG="${routine}"`);
+    lines.push("\tset CT=%index");
+    lines.push("\t;");
+    lines.push("\tset sc=$$ValidarExecucaoCSW^%CSUTIRG001()");
+    lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit");
+    lines.push("\t;");
+    lines.push(`\t; csw:aj:${width},6,${definition.title}`);
+    lines.push(`\tdo AJ^%CSUTIUD(${width},6,"${u.escapeMac(definition.title)}")`);
+    lines.push("\t;");
+    lines.push(`0500\tset ${target}=""`);
+    lines.push("\t;");
+    lines.push("\tdo 9000");
+    lines.push("\t;");
+    lines.push(`\t; ${u.sanitize(description)}`);
+    lines.push("1000\t;");
+    lines.push(hasDisplay ? '1000ON\tdo ClearCp^%CSW1UTI("ds1000")' : `1000ON\t${component(field, "1000", target)}`);
+    if (hasDisplay) lines.push(`\t${component(field, "1000", target)}`);
+    lines.push("\tquit:$$CSP^%CSW1UTI()");
+    lines.push("\t;");
+    lines.push("1000EX\tgoto 9999:%=27!(%=140)");
+    lines.push("\t;");
+    lines.push("\tif '$$Valcp1000() goto 1000");
+    lines.push("\t;");
+    lines.push('2999\tdo Focus^%CSW1UTI(%PRG,"btConfirmar") quit');
+    lines.push("\t;");
+    lines.push("\t; Confirmar");
+    lines.push("3000\tif '$$Valcp1000() quit");
+    lines.push("\t;");
+    lines.push(`\tset sc=$$Duplicar${config.entityName}^${config.rgRoutineName}(${ruleArguments.join(",")})`);
+    lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit");
+    lines.push("\t;");
+    lines.push(`\tdo MECABECALHO^%CSW1UTI("${u.escapeMac(config.title)} duplicada para "_${target}_"!")`);
+    lines.push("\t;");
+    lines.push("\tgoto 9999");
+    lines.push("\t;");
+    lines.push("\t; Tela");
+    lines.push("9000\tdo Clear^%CSW1UTI()");
+    lines.push("\tdo Enable^%CSW1UTI()");
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+    lines.push("\t; Fim");
+    lines.push("9999\tdo FJ^%CSUTIUD");
+    lines.push("\tdo FJ^%CSW1UTI");
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+    lines.push("\t; Método Valcp1000()");
+    lines.push("Valcp1000()\t;");
+    lines.push(`\tif ${target}="" do ME^%CSUTIUD("${u.escapeMac(description)}: Campo obrigatório!") quit 0`);
+    lines.push(`\tif ${target}=${definition.keyVariable} do ME^%CSUTIUD("${u.escapeMac(description)} igual ao de origem!") quit 0`);
+    lines.push("\t;");
+    const custom = renderValcpCode(field, "1000", config).filter(
+      (line) => !/Campo obrigatório!"\) quit 0$/.test(line.trim())
+    );
+    while (custom.length && custom[0].trim() === ";") custom.shift();
+    if (custom.length) {
+      custom.forEach((line) => lines.push(line.trim() === ";" ? "\t;" : `\t${line}`));
+      lines.push("\t;");
+    }
+    lines.push("\tquit $$$OK");
+    lines.push("\t;");
+    lines.push("\t; Método Show");
+    lines.push("Show(%cswP1,%cswP2,%cswP3,%cswP4)\t;");
+    lines.push(`\tdo Show^%CSW1UTI("${routine}",$get(%cswP1),$get(%cswP2),$get(%cswP3),$get(%cswP4))`);
+    lines.push("\t;");
+    lines.push("\tquit");
+    lines.push("\t;");
+    lines.push("\t; Tags CSW");
+    lines.push("\t;");
+    lines.push(`\t; csw:label:1,1,${labelSize},${u.escapeMac(description)}*`);
+    if (hasDisplay) lines.push(`\t; csw:display:${field.displayColumn},1,30,ds1000`);
+    lines.push("\t;");
+    lines.push(`\t; csw:botao:1,4,btConfirmar,C<u>o</u>nfirmar,o,3000^${routine},check,Duplicar,15`);
+    lines.push(`\t; csw:botao:16,4,btCancelar,<u>C</u>ancelar,c,9999^${routine},cancelar,Cancelar,15`);
+    lines.push("\t;");
+    lines.push(`\t; csw:labelcreate:${routine}`);
+    lines.push("\t; csw:labeldestroy:9999");
+    lines.push("\t; csw:csp:gerar");
+
+    return lines.join("\n");
   }
 
   function generateCombined() {
@@ -3204,6 +3963,8 @@
   }
 
   app.mac = {
+    appendListF7Labels,
+    fieldF7Routine: normalizedF7Routine,
     generate:
       generateParent,
 

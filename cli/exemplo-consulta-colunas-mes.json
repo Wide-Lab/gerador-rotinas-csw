@@ -1,0 +1,209 @@
+{
+  "routine": {
+    "name": "WDOMTESTECOM110",
+    "title": "Gerenciador de Segmento",
+    "mode": "grid",
+    "useTabs": false,
+    "useRules": true,
+    "rgRoutineName": "WDOMTESTECOM110RG",
+    "entityName": "GerenciadorSegmento",
+    "globalName": "mtempWDOMTESTECOM110",
+    "dataVariable": "WDOMTESTECOM110",
+    "useRoutineCompany": true,
+    "useBtnManter": false,
+    "generateSave": false,
+    "width": 108,
+    "height": 28
+  },
+  "fields": [
+    {
+      "id": "dti",
+      "description": "Período Faturamento",
+      "variable": "DATINI",
+      "type": "date",
+      "tabId": "parent",
+      "required": true,
+      "extraVariables": "DADDET,CODLIN,CODREG,DOC600",
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 11,
+      "inputColumn": 12,
+      "inputLine": 1
+    },
+    {
+      "id": "dtf",
+      "description": "Até",
+      "variable": "DATFIN",
+      "type": "date",
+      "tabId": "parent",
+      "required": true,
+      "labelColumn": 22,
+      "labelLine": 1,
+      "labelSize": 3,
+      "inputColumn": 25,
+      "inputLine": 1
+    },
+    {
+      "id": "cli",
+      "description": "Cliente",
+      "variable": "CODCLI",
+      "type": "integer",
+      "tabId": "parent",
+      "inputSize": 8,
+      "lookupPreset": "custom",
+      "f7Routine": "FTCL^CCFT299",
+      "extraVariables": "FTCL",
+      "hasDisplay": true,
+      "displayLoadMode": "valcp",
+      "valcpCode": "if {reference}=\"\" do Set^%CSW1UTI(%PRG,\"{display}\",\"Todos\") quit $$$OK\nset sc=$$VerCliente^CCFTRG001(CE,{reference},.FTCL)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0\ndo Set^%CSW1UTI(%PRG,\"{display}\",$piece(FTCL,Z,2))",
+      "labelColumn": 36,
+      "labelLine": 1,
+      "labelSize": 6,
+      "inputColumn": 42,
+      "inputLine": 1,
+      "displayLine": 1,
+      "displayColumn": 51,
+      "displaySize": 30
+    },
+    {
+      "id": "seg",
+      "description": "Segmento",
+      "variable": "CODSEG",
+      "type": "string",
+      "tabId": "parent",
+      "inputSize": 8,
+      "f7ListLoad": "set sc=$$ObterTabSegmento^WDOMTESTECOM100RG(CE,.{table})",
+      "f7ListTitles": "Segmento,Descrição",
+      "f7ListSizes": "8,40",
+      "hasDisplay": true,
+      "displayLoadMode": "valcp",
+      "valcpCode": "if {reference}=\"\" do Set^%CSW1UTI(%PRG,\"{display}\",\"Todos\") quit $$$OK\nif '$data(^WDOMTESTECOMCFG(1,CE,1,{reference})) do ME^%CSUTIUD(\"Segmento não configurado!\") quit 0\ndo Set^%CSW1UTI(%PRG,\"{display}\",$piece(^WDOMTESTECOMCFG(1,CE,1,{reference}),Z,3))",
+      "labelColumn": 1,
+      "labelLine": 2,
+      "labelSize": 11,
+      "inputColumn": 12,
+      "inputLine": 2,
+      "displayLine": 2,
+      "displayColumn": 21,
+      "displaySize": 30
+    }
+  ],
+  "indexes": [],
+  "grid": {
+    "location": "parent",
+    "code": 41,
+    "line": 4,
+    "lineAuto": false,
+    "height": 19,
+    "startLine": 5,
+    "endLine": 22,
+    "consultButton": {
+      "enabled": true,
+      "column": 92,
+      "line": 1
+    },
+    "dynamicColumns": {
+      "load": "set sc=$$ObterColunasMes^WDOMTESTECOM110RG(DATINI,DATFIN,.{table})",
+      "table": "TABCOLDIN",
+      "firstWorkPiece": 8
+    },
+    "columns": [
+      {
+        "title": "Segmento",
+        "type": "a",
+        "width": 18,
+        "variable": "SEGLIN",
+        "workPiece": 1
+      },
+      {
+        "title": "Cliente/Descrição",
+        "type": "a",
+        "width": 28,
+        "variable": "CLILIN",
+        "workPiece": 2
+      },
+      {
+        "title": "Valor do CCI",
+        "type": "v2",
+        "width": 11,
+        "variable": "CCILIN",
+        "workPiece": 3
+      },
+      {
+        "title": "Seg",
+        "type": "a",
+        "width": 1,
+        "variable": "CODSEGL",
+        "workPiece": 4,
+        "detail": true
+      },
+      {
+        "title": "Cli",
+        "type": "n",
+        "width": 1,
+        "variable": "CODCLIL",
+        "workPiece": 5,
+        "detail": true
+      },
+      {
+        "title": "Ent",
+        "type": "a",
+        "width": 1,
+        "variable": "ENTLIN",
+        "workPiece": 6,
+        "detail": true
+      },
+      {
+        "title": "Mov",
+        "type": "n",
+        "width": 1,
+        "variable": "MOVLIN",
+        "workPiece": 7,
+        "detail": true
+      },
+      {
+        "title": "Linha",
+        "type": "n",
+        "width": 1,
+        "variable": "SEQLIN",
+        "recordKey": true
+      }
+    ]
+  },
+  "buttons": [
+    {
+      "id": "cci",
+      "text": "Detalha <u>C</u>CI",
+      "buttonId": "btDetalhaCCI",
+      "icon": "search",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3500",
+      "positionMode": "manual",
+      "column": 41,
+      "line": 26,
+      "size": 12,
+      "initialState": 0,
+      "actionCode": "set sc=$$ObterDadosLinha^%CSW1GRID(CT,%PRG,41,,.DADDET,.CODLIN,.CODREG)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 3000\nset DOC600=$piece(DADDET,Z,7)_\";\"_$piece(DADDET,Z,6)_\";\"_DATFIN\ndo Show^CCCIB610CSW(\"3500EX^WDOMTESTECOM110\",\"(DOC600,1,\"\"\"\")\")\nquit:$$CSP^%CSW1UTI()\n3500EX\tgoto 3000"
+    },
+    {
+      "id": "fat",
+      "text": "Detalha <u>F</u>aturamento",
+      "buttonId": "btDetalhaFaturamento",
+      "icon": "search",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3510",
+      "positionMode": "manual",
+      "column": 55,
+      "line": 26,
+      "size": 12,
+      "initialState": 0,
+      "actionCode": "set sc=$$ObterDadosLinha^%CSW1GRID(CT,%PRG,41,,.DADDET,.CODLIN,.CODREG)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 3000\ndo Show^WDOMTESTECOM120(\"3510EX^WDOMTESTECOM110\",\"($piece(DADDET,Z,4),$piece(DADDET,Z,5),$$MesAnoEditado^WDOMTESTECOM110RG(DATINI))\")\nquit:$$CSP^%CSW1UTI()\n3510EX\tgoto 3000"
+    }
+  ],
+  "ruleHooks": {
+    "workGlobalCode": "; Segmento/cliente com CCI e valores por mês do período\nset sc=$$CarregarGerenciador(term,codEmpresa,periodoFaturamento,ate,cliente,segmento)",
+    "extraMethods": "; Colunas do período: 5 por mês (Estoque, Custo Op., Comodato, Faturamento, % Investimento)\n; tabela(n) = tipo^largura^título\n;\n; set sc=$$ObterColunasMes^WDOMTESTECOM110RG(dataInicial,dataFinal,.tabela)\nObterColunasMes(dataInicial,dataFinal,tabela)\t;\n$$$VAR\nnew sc,tabMes,mes,edt,n\n;\nkill tabela\nset sc=$$ObterMesesPeriodo(dataInicial,dataFinal,.tabMes)\nif $$$ISERR(sc) quit sc\n;\nset (mes,n)=\"\"\nfor  set mes=$order(tabMes(mes)) quit:mes=\"\"  do\n. set edt=$extract(tabMes(mes),5,6)_\"/\"_$extract(tabMes(mes),3,4)\n. set n=n+1,tabela(n)=\"v2^11^Vlr Estoque \"_edt\n. set n=n+1,tabela(n)=\"v2^11^Custo Oper. \"_edt\n. set n=n+1,tabela(n)=\"v2^11^Vlr Comodato \"_edt\n. set n=n+1,tabela(n)=\"v2^11^Faturamento \"_edt\n. set n=n+1,tabela(n)=\"v2^9^% Invest. \"_edt\n;\nquit $$$OK\n;\n; Meses do período: tabMes(n)=AAAAMM (até 12 meses)\n;\n; set sc=$$ObterMesesPeriodo^WDOMTESTECOM110RG(dataInicial,dataFinal,.tabMes)\nObterMesesPeriodo(dataInicial,dataFinal,tabMes)\t;\n$$$VAR\nnew anoMes,anoMesFinal,n\n;\nkill tabMes\nif $get(dataInicial)=\"\"!($get(dataFinal)=\"\") quit $$$ERROR(10000,\"Informe o período de faturamento!\")\nif dataFinal<dataInicial quit $$$ERROR(10000,\"Data final menor que a data inicial!\")\n;\nset anoMes=$$AnoMes(dataInicial),anoMesFinal=$$AnoMes(dataFinal),n=0\nfor  quit:anoMes>anoMesFinal  set n=n+1,tabMes(n)=anoMes,anoMes=$$ProximoMes(anoMes) quit:n>12\nif n>12 quit $$$ERROR(10000,\"Informe um período de no máximo 12 meses!\")\n;\nquit $$$OK\n;\n; Ano/mês (AAAAMM) de uma data\n;\n; set anoMes=$$AnoMes^WDOMTESTECOM110RG(data)\nAnoMes(data)\t;\nquit $zdate(data,8)\\100\n;\nProximoMes(anoMes)\t;\nquit $select(anoMes#100=12:(anoMes\\100+1)*100+1,1:anoMes+1)\n;\n; Primeiro e último dia do mês (AAAAMM) em $horolog\n;\nPrimeiroDia(anoMes)\t;\nquit $zdateh(anoMes_\"01\",8)\n;\nUltimoDia(anoMes)\t;\nquit $zdateh($$ProximoMes(anoMes)_\"01\",8)-1\n;\n; Mês/Ano editado (MM/AAAA) de uma data\n;\n; set mesAno=$$MesAnoEditado^WDOMTESTECOM110RG(data)\nMesAnoEditado(data)\t;\nquit $extract($zdate(data,8),5,6)_\"/\"_$extract($zdate(data,8),1,4)\n;\n; Carregar a consulta: uma linha por segmento/cliente com CCI no tipo de documento do segmento\n; linha = segmento^cliente^valorCCI^codSegmento^codCliente^entidade^tipoMovimento^(5 valores por mês)\n;\n; set sc=$$CarregarGerenciador^WDOMTESTECOM110RG(term,codEmpresa,dataInicial,dataFinal,codCliente,codSegmento)\nCarregarGerenciador(term,codEmpresa,dataInicial,dataFinal,codCliente,codSegmento)\t;\n$$$VAR\nnew sc,tabMes,segmento,tabEntidade,seq\n;\nkill ^||WDOMTESTECOMMASC\nset sc=$$ObterMesesPeriodo(dataInicial,dataFinal,.tabMes)\nif $$$ISERR(sc) quit sc\n;\nset sc=$$ObterEntidadesCliente(codEmpresa,$get(codCliente),.tabEntidade)\nif $$$ISERR(sc) quit sc\n;\nset seq=0,segmento=\"\"\nif $get(codSegmento)'=\"\" quit $$CarregarSegmento(term,codEmpresa,codSegmento,.tabMes,.tabEntidade,.seq)\nfor  set segmento=$order(^WDOMTESTECOMCFG(1,codEmpresa,1,segmento)) quit:segmento=\"\"!$$$ISERR(sc)  do\n. set sc=$$CarregarSegmento(term,codEmpresa,segmento,.tabMes,.tabEntidade,.seq)\n;\nquit sc\n;\n; Entidade do CCI de cada cliente (FTCL p27): tabEntidade(entidade)=cliente\n;\n; set sc=$$ObterEntidadesCliente^WDOMTESTECOM110RG(codEmpresa,codCliente,.tabEntidade)\nObterEntidadesCliente(codEmpresa,codCliente,tabEntidade)\t;\n$$$VAR\nnew sc,ftcl,cliente,entidade\n;\nkill tabEntidade\nset sc=$$$OK\nif $get(codCliente)'=\"\" do  quit sc\n. set sc=$$VerCliente^CCFTRG001(codEmpresa,codCliente,.ftcl)\n. quit:$$$ISERR(sc)\n. set entidade=$piece(ftcl,Z,27)\n. if entidade'=\"\" set tabEntidade(entidade)=codCliente\n;\nset cliente=\"\"\nfor  set cliente=$order(^FTCL(codEmpresa,cliente)) quit:cliente=\"\"  do\n. set entidade=$piece($get(^FTCL(codEmpresa,cliente)),Z,27)\n. if entidade'=\"\",'$data(tabEntidade(entidade)) set tabEntidade(entidade)=cliente\n;\nquit $$$OK\n;\n; Carregar um segmento: valores por cliente e rateio do custo operacional pelo CCI\n;\n; set sc=$$CarregarSegmento^WDOMTESTECOM110RG(term,codEmpresa,codSegmento,.tabMes,.tabEntidade,.seq)\nCarregarSegmento(term,codEmpresa,codSegmento,tabMes,tabEntidade,seq)\t;\n$$$VAR\nnew sc,cfg,tipoDocumento,tipoMovimento,cibtab,entidade,cliente,tabCliente,totalCCI,mes,despesa\nnew linha,valores,valorCCI,custo,comodato,faturamento,historico\n;\nset cfg=$get(^WDOMTESTECOMCFG(1,codEmpresa,1,codSegmento))\nif cfg=\"\" quit $$$ERROR(10000,\"Segmento \"_codSegmento_\" não configurado!\")\nset tipoDocumento=$piece($get(^WDOMTESTECOMCFG(1,codEmpresa,1,codSegmento,1)),Z,3)\nif tipoDocumento=\"\" quit $$$OK\nset sc=$$VerTipoDocto^CCCIBRG001(codEmpresa,tipoDocumento,.cibtab)\nif $$$ISERR(sc) quit sc\nset tipoMovimento=$piece(cibtab,Z,2)\n;\n; Valores por cliente (CCI, estoque e faturamento do mês)\nkill tabCliente\nset entidade=\"\",totalCCI=0,sc=$$$OK\nfor  set entidade=$order(tabEntidade(entidade)) quit:entidade=\"\"!$$$ISERR(sc)  do\n. quit:'$data(^CIPDOC(codEmpresa,entidade,tipoMovimento,1))\n. set cliente=tabEntidade(entidade)\n. set sc=$$CalcularCliente(codEmpresa,codSegmento,tipoDocumento,tipoMovimento,entidade,cliente,.tabMes,.tabCliente)\n. set totalCCI=totalCCI+$get(tabCliente(cliente))\nif $$$ISERR(sc) quit sc\n;\n; Despesas operacionais do mês (conta x centro de custo) rateadas pelo CCI do cliente\nset cliente=\"\",sc=$$$OK\nfor  set cliente=$order(tabCliente(cliente)) quit:cliente=\"\"!$$$ISERR(sc)  do\n. set valorCCI=+$get(tabCliente(cliente)),valores=\"\",mes=\"\"\n. for  set mes=$order(tabMes(mes)) quit:mes=\"\"  do\n. . set despesa=$$DespesaOperacional(codEmpresa,codSegmento,tabMes(mes))\n. . set custo=$select(totalCCI:despesa*valorCCI/totalCCI,1:0)\n. . set comodato=$get(tabCliente(cliente,mes,1))+custo\n. . set faturamento=$get(tabCliente(cliente,mes,2))\n. . set $piece(valores,Z,mes-1*5+1)=$$Valor($get(tabCliente(cliente,mes,1)))\n. . set $piece(valores,Z,mes-1*5+2)=$$Valor(custo)\n. . set $piece(valores,Z,mes-1*5+3)=$$Valor(comodato)\n. . set $piece(valores,Z,mes-1*5+4)=$$Valor(faturamento)\n. . set $piece(valores,Z,mes-1*5+5)=$$Valor($select(faturamento:comodato/faturamento*100,1:0))\n. . ; Mês fechado: valores do histórico (item 3)\n. . set historico=$get(^WDOMTESTECOMHIS(1,codEmpresa,tabMes(mes),codSegmento,cliente))\n. . if historico'=\"\" set $piece(valores,Z,mes-1*5+1,mes*5)=$piece(historico,Z,2,6)\n. set linha=codSegmento_\" - \"_$piece(cfg,Z,3)_Z_cliente_\" - \"_$$NomeCliente(codEmpresa,cliente)_Z_$$Valor(valorCCI)\n. set linha=linha_Z_codSegmento_Z_cliente_Z_$get(tabCliente(cliente,\"E\"))_Z_tipoMovimento_Z_valores\n. set seq=seq+1\n. set sc=$$GravarGlobalTrabalho(term,seq,linha)\n;\nquit sc\n;\n; Valor com 2 casas\n;\nValor(valor)\t;\nquit +$justify(+$get(valor),0,2)\n;\n; Nome do cliente\n;\n; set nome=$$NomeCliente^WDOMTESTECOM110RG(codEmpresa,codCliente)\nNomeCliente(codEmpresa,codCliente)\t;\n$$$VAR\nnew sc,ftcl\n;\nset sc=$$VerCliente^CCFTRG001(codEmpresa,codCliente,.ftcl)\n;\nquit $piece($get(ftcl),Z,2)\n;\n; Valores do cliente no segmento\n; tabCliente(cliente) = valor do CCI em aberto hoje\n; tabCliente(cliente,mes,1) = valor do estoque do CCI no fim do mês (saldo x preço médio)\n; tabCliente(cliente,mes,2) = faturamento do mês (tipos de nota e máscaras acabado/revenda)\n;\n; set sc=$$CalcularCliente^WDOMTESTECOM110RG(codEmpresa,codSegmento,tipoDocumento,tipoMovimento,entidade,cliente,.tabMes,.tabCliente)\nCalcularCliente(codEmpresa,codSegmento,tipoDocumento,tipoMovimento,entidade,cliente,tabMes,tabCliente)\t;\n$$$VAR\nnew sc,documento,produto,seqMov,dataMov,cibmov,qtd,valor,mes,ultimo,achou,anoMes\n;\nset (documento,achou)=\"\",sc=$$$OK\nfor  set documento=$order(^CIPDOC(codEmpresa,entidade,tipoMovimento,1,documento)) quit:documento=\"\"  do\n. set produto=\"\"\n. for  set produto=$order(^CIPDOC(codEmpresa,entidade,tipoMovimento,1,documento,produto)) quit:produto=\"\"  do\n. . quit:'$$ItemDaMascara(codEmpresa,codSegmento,1,produto)\n. . set seqMov=\"\"\n. . for  set seqMov=$order(^CIPDOC(codEmpresa,entidade,tipoMovimento,1,documento,produto,seqMov)) quit:seqMov=\"\"  do\n. . . set dataMov=+$piece(documento,\";\",2)\n. . . set cibmov=$get(^CIBMOV(codEmpresa,dataMov,seqMov))\n. . . quit:$piece(cibmov,Z,1)'=tipoDocumento\n. . . set achou=1\n. . . set sc=$$ObterSaldoMovimentoCCI^CCCIBRG002(codEmpresa,dataMov,seqMov,+$h,.qtd,.valor)\n. . . set tabCliente(cliente)=$get(tabCliente(cliente))+(valor/100)\n. . . set mes=\"\"\n. . . for  set mes=$order(tabMes(mes)) quit:mes=\"\"  do\n. . . . set anoMes=tabMes(mes),ultimo=$$UltimoDia(anoMes)\n. . . . quit:dataMov>ultimo\n. . . . set sc=$$ObterSaldoMovimentoCCI^CCCIBRG002(codEmpresa,dataMov,seqMov,ultimo,.qtd,.valor)\n. . . . set tabCliente(cliente,mes,1)=$get(tabCliente(cliente,mes,1))+((qtd/1000)*$$ObterPrecoMedioEst^CCESA202RG(codEmpresa,produto,anoMes,\"\",\"\",\"\",1))\nif achou=\"\" quit $$$OK\n;\nset tabCliente(cliente,\"E\")=entidade\nset mes=\"\"\nfor  set mes=$order(tabMes(mes)) quit:mes=\"\"  set tabCliente(cliente,mes,2)=$$FaturamentoMes(codEmpresa,codSegmento,cliente,tabMes(mes))\n;\nquit $$$OK\n;\n; Item pertence às máscaras do segmento (lista 1 = itens enviados, 3 = acabado/revenda; sem máscara = todos)\n; As máscaras de cada lista são expandidas uma vez por consulta em ^||WDOMTESTECOMMASC.\n;\n; if $$ItemDaMascara^WDOMTESTECOM110RG(codEmpresa,codSegmento,lista,codItem)\nItemDaMascara(codEmpresa,codSegmento,lista,codItem)\t;\n$$$VAR\nnew sc,mascara,item,qtd,chave,id\n;\nif '$data(^WDOMTESTECOMCFG(1,codEmpresa,1,codSegmento,1,lista)) quit 1\nif '$data(^||WDOMTESTECOMMASC(codSegmento,lista)) do\n. set ^||WDOMTESTECOMMASC(codSegmento,lista)=\"\",mascara=\"\",id=\"WDCOM\"_lista\n. for  set mascara=$order(^WDOMTESTECOMCFG(1,codEmpresa,1,codSegmento,1,lista,mascara)) quit:mascara=\"\"  do\n. . set sc=$$ObterTabelaMascaras^CCCGIRG012(codEmpresa,mascara,\"S\",\"\",.qtd,id)\n. . set chave=\"\"\n. . for  set chave=$order(^mtempSelMasc($job,id,chave)) quit:chave=\"\"  set ^||WDOMTESTECOMMASC(codSegmento,lista,chave)=\"\"\n. . set sc=$$ExcluirTabelaMascara^CCCGIRG012(id)\n;\nset item=$piece($get(^CGISAI(codEmpresa,codItem)),Z,1)\nif item=\"\" quit 0\n;\nquit $data(^||WDOMTESTECOMMASC(codSegmento,lista,\"X\"_item))>0\n;\n; Despesas operacionais do mês: débitos das contas x centros de custo do segmento (^CTSCCC)\n;\n; set valor=$$DespesaOperacional^WDOMTESTECOM110RG(codEmpresa,codSegmento,anoMes)\nDespesaOperacional(codEmpresa,codSegmento,anoMes)\t;\n$$$VAR\nnew conta,centro,data,total\n;\nset data=$$PrimeiroDia(anoMes),conta=\"\",total=0\nfor  set conta=$order(^WDOMTESTECOMCFG(1,codEmpresa,1,codSegmento,2,1,conta)) quit:conta=\"\"  do\n. set centro=\"\"\n. for  set centro=$order(^WDOMTESTECOMCFG(1,codEmpresa,1,codSegmento,2,2,centro)) quit:centro=\"\"  do\n. . set total=total+($piece($get(^CTSCCC(codEmpresa,1,conta,centro,data)),Z,2)/100)\n;\nquit total\n;\n; Faturamento do cliente no mês (soma do valor bruto dos itens faturados do segmento)\n;\n; set valor=$$FaturamentoMes^WDOMTESTECOM110RG(codEmpresa,codSegmento,codCliente,anoMes)\nFaturamentoMes(codEmpresa,codSegmento,codCliente,anoMes)\t;\n$$$VAR\nnew sc,tabNota,n,total\n;\nset sc=$$ObterItensFaturados(codEmpresa,codSegmento,codCliente,anoMes,.tabNota)\nset n=\"\",total=0\nfor  set n=$order(tabNota(n)) quit:n=\"\"  set total=total+$piece(tabNota(n),Z,6)\n;\nquit total\n;\n; Itens faturados do cliente no mês (^FTFC): notas dos tipos do segmento, itens das máscaras acabado/revenda\n; tabNota(n) = data^nota^item^produto^quantidade^bruto^impostos^unitário\n;\n; set sc=$$ObterItensFaturados^WDOMTESTECOM110RG(codEmpresa,codSegmento,codCliente,anoMes,.tabNota)\nObterItensFaturados(codEmpresa,codSegmento,codCliente,anoMes,tabNota)\t;\n$$$VAR\nnew data,ultimo,nota,item,ftnf,ftnfi,n,impostos\n;\nkill tabNota\nset data=$$PrimeiroDia(anoMes)-1,ultimo=$$UltimoDia(anoMes),n=0\nfor  set data=$order(^FTFC(codEmpresa,codCliente,data)) quit:data=\"\"!(data>ultimo)  do\n. set nota=\"\"\n. for  set nota=$order(^FTFC(codEmpresa,codCliente,data,nota)) quit:nota=\"\"  do\n. . set ftnf=$get(^FTNF(codEmpresa,data,nota))\n. . if $data(^WDOMTESTECOMCFG(1,codEmpresa,1,codSegmento,1,2)),'$data(^WDOMTESTECOMCFG(1,codEmpresa,1,codSegmento,1,2,+$piece(ftnf,Z,1))) quit\n. . set item=\"\"\n. . for  set item=$order(^FTNF(codEmpresa,data,nota,item)) quit:item=\"\"  do\n. . . quit:item'=+item\n. . . set ftnfi=$get(^FTNF(codEmpresa,data,nota,item))\n. . . quit:'$$ItemDaMascara(codEmpresa,codSegmento,3,$piece(ftnfi,Z,1))\n. . . ; Impostos: IPI (5) + ICMS (12) + ICMS ST (14) + PIS (73) + COFINS (74), valores x100\n. . . set impostos=($piece(ftnfi,Z,5)+$piece(ftnfi,Z,12)+$piece(ftnfi,Z,14)+$piece(ftnfi,Z,73)+$piece(ftnfi,Z,74))/100\n. . . set n=n+1,tabNota(n)=data_Z_nota_Z_item_Z_$piece(ftnfi,Z,1)_Z_($piece(ftnfi,Z,2)/1000)_Z_($piece(ftnfi,Z,4)/100)_Z_impostos_Z_($piece(ftnfi,Z,3)/100)\n;\nquit $$$OK\n;\n; Histórico do mês (item 3, agendador no fechamento)\n; ^WDOMTESTECOMHIS(1,emp,anoMes,segmento,cliente) = valorCCI^estoque^custo^comodato^faturamento^%investimento\n;\n; set sc=$$GravarHistoricoMes^WDOMTESTECOM110RG(codEmpresa,anoMes)\nGravarHistoricoMes(codEmpresa,anoMes)\t;\n$$$VAR\nnew sc,term,seq,linha\n;\nset term=\"HIS\"_$job\nkill ^mtempWDOMTESTECOM110(term)\nset sc=$$CarregarGerenciador(term,codEmpresa,$$PrimeiroDia(anoMes),$$UltimoDia(anoMes),\"\",\"\")\nif $$$ISERR(sc) kill ^mtempWDOMTESTECOM110(term) quit sc\n;\nset seq=\"\"\nfor  set seq=$order(^mtempWDOMTESTECOM110(term,seq)) quit:seq=\"\"  do\n. set linha=^mtempWDOMTESTECOM110(term,seq)\n. do $$$SetG(^WDOMTESTECOMHIS(1,codEmpresa,anoMes,$piece(linha,Z,4),$piece(linha,Z,5)),$piece(linha,Z,3)_Z_$piece(linha,Z,8,12))\nkill ^mtempWDOMTESTECOM110(term)\n;\nquit $$$OK\n;\n; Entrada do agendador de tarefas: grava o histórico do mês anterior\n;\n; do AgendadorHistorico^WDOMTESTECOM110RG(codEmpresa)\nAgendadorHistorico(codEmpresa)\t;\n$$$VAR\nnew sc,anoMes\n;\nset anoMes=$$AnoMes(+$h)\nset anoMes=$select(anoMes#100=1:(anoMes\\100-1)*100+12,1:anoMes-1)\nset sc=$$GravarHistoricoMes(codEmpresa,anoMes)\n;\nquit\n"
+  }
+}

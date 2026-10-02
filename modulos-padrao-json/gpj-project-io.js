@@ -54,9 +54,13 @@
       generateSave: config.generateSave,
       generateDelete: config.generateDelete,
       generateLock: config.generateLock,
+      lockTimeout: config.lockTimeout,
+      generateOwnF7: config.generateOwnF7,
+      ownF7DescriptionFieldId: config.ownF7DescriptionFieldId,
 
       useBtnManter: config.useBtnManter,
       btnManterColumn: config.btnManterColumn,
+      btnManterAlignment: config.btnManterAlignment,
       btnManterLine: config.btnManterLine,
       btnManterLocation: config.btnManterLocation,
 
@@ -86,7 +90,8 @@
         activePreview: app.state.activePreview || "parent",
         activeMacRoutine: app.state.activeMacRoutine || "parent",
         activeRuleRoutine: app.state.activeRuleRoutine || "rg",
-        layoutSuggestions: clone(app.state.layoutSuggestions) || {}
+        layoutSuggestions: clone(app.state.layoutSuggestions) || {},
+        ruleHooks: clone(app.state.ruleHooks) || {}
       }
     };
   }
@@ -151,12 +156,18 @@
       useBtnManter: booleanValue(routine.useBtnManter, current.useBtnManter),
       btnManterLine: numberValue(routine.btnManterLine, current.btnManterLine),
       btnManterColumn: numberValue(routine.btnManterColumn, current.btnManterColumn),
+      btnManterAlignment:
+        routine.btnManterAlignment ||
+        (routine.btnManterColumn !== undefined ? "manual" : current.btnManterAlignment),
       btnManterLocation: routine.btnManterLocation || current.btnManterLocation,
       generateSaveAnother: booleanValue(
         routine.generateSaveAnother,
         current.generateSaveAnother
       ),
       generateDelete: booleanValue(routine.generateDelete, current.generateDelete),
+      generateSave: booleanValue(routine.generateSave, current.generateSave),
+      generateObtain: booleanValue(routine.generateObtain, current.generateObtain),
+      generateLock: booleanValue(routine.generateLock, current.generateLock),
       tabPanelWidth: numberValue(routine.tabPanelWidth, current.tabPanelWidth),
       tabPanelColumn: numberValue(routine.tabPanelColumn, current.tabPanelColumn)
     };
@@ -203,6 +214,7 @@
     }
     if (["d", "date", "data"].includes(clean)) return "d";
     if (["v3", "decimal", "float", "value", "valor"].includes(clean)) return "v3";
+    if (["v2", "v4"].includes(clean)) return clean;
     if (["a", "string", "text", "texto", "alphanumeric", "alfanumerico", "alfanumérico"].includes(clean)) {
       return "a";
     }
@@ -276,6 +288,7 @@
       fields,
       globalIndexes: clone(input.indexes || input.globalIndexes) || [],
       customButtons,
+      ruleHooks: clone(input.ruleHooks) || {},
       parentGrid: null,
       activeGridLocation: "parent",
       activePreview: "parent",
@@ -296,6 +309,13 @@
         settings: {
           gridCode: grid.code ?? grid.gridCode,
           gridLinePosition: grid.line ?? grid.linePosition ?? grid.gridLinePosition,
+          gridLinePositionAuto:
+            (grid.column ?? grid.columnPosition ?? grid.gridColumnPosition) !== undefined || grid.lineAuto === false
+              ? false
+              : true,
+          gridColumnPosition: grid.column ?? grid.columnPosition ?? grid.gridColumnPosition,
+          gridTableWidth: grid.width ?? grid.tableWidth ?? grid.gridTableWidth,
+          gridDynamicColumns: grid.dynamicColumns ?? grid.gridDynamicColumns,
           gridHeight: grid.height ?? grid.gridHeight,
           gridLineStart: grid.startLine ?? grid.lineStart ?? grid.line ?? grid.gridLineStart,
           gridLineEnd: grid.endLine ?? grid.lineEnd ?? grid.gridLineEnd,
@@ -319,6 +339,10 @@
             grid.consultButton?.line ?? grid.consultButtonLine ?? grid.gridConsultButtonLine,
             1
           ),
+          gridFinalFocus:
+            String(
+              grid.finalFocus ?? grid.focusAfterFields ?? grid.gridFinalFocus ?? "auto"
+            ).trim() || "auto",
           gridCheckGlobal:
             grid.checkGlobal ??
             grid.selectionGlobal ??
@@ -328,7 +352,8 @@
           gridMaintenance: grid.maintenance ?? grid.gridMaintenance,
           gridInlineMaintenance: grid.maintenance ?? grid.gridInlineMaintenance,
           gridAutoButtonPosition:
-            grid.automaticButtonPosition ?? grid.gridAutoButtonPosition,
+            grid.automaticButtonPosition ?? grid.gridAutoButtonPosition ??
+            (grid.maintenanceButtonColumn !== undefined || grid.maintenanceButtonLine !== undefined ? false : undefined),
           gridMaintenanceButtonColumn:
             grid.maintenanceButtonColumn ?? grid.gridMaintenanceButtonColumn,
           gridMaintenanceButtonLine:
@@ -336,6 +361,8 @@
           gridSaveButtonLine: grid.saveButtonLine ?? grid.gridSaveButtonLine,
           gridAllowInsert: grid.allowInsert ?? grid.gridAllowInsert,
           gridAllowRemove: grid.allowRemove ?? grid.gridAllowRemove,
+          gridAutoSequence: grid.autoSequence ?? grid.gridAutoSequence ??
+            ((Array.isArray(grid.columns) ? grid.columns : []).find((column) => column && column.recordKey && column.autoSequence) || {}).autoSequence,
           gridRowEnter: grid.rowEnter ?? grid.gridRowEnter
         },
         columns: (clone(grid.columns) || []).map((column, index) => {
@@ -347,7 +374,10 @@
             title: isCheck ? String(column.title || "") : column.title,
             width: column.width ?? (isCheck ? 10 : undefined),
             variable: column.variable || (isCheck ? `CHECK${index + 1}` : undefined),
-            workPiece: isCheck ? 0 : (column.workPiece ?? column.piece),
+            workPiece: isCheck
+              ? 0
+              : (column.workPiece ?? column.piece ??
+                  ((column.recordKey ?? column.key) === true || column.displayOnly === true ? 0 : index + 1)),
             displayOnly: isCheck ? true : column.displayOnly,
             detail: isCheck ? false : (column.detail ?? column.includeInDetail),
             recordKey: isCheck ? false : (column.recordKey ?? column.key),
@@ -462,17 +492,22 @@
       return tabAliases.get(clean) || clean;
     }
 
-    const customButtons = (clone(source.customButtons) || []).map((button) => {
+    const usedControlIds = new Set();
+    const customButtons = (clone(source.customButtons) || []).map((button, index) => {
       const oldId = button.id;
       const id = uniqueId(oldId, usedButtonIds);
       const location = resolveTabLocation(button.location || "parent");
+      let buttonId = String(button.buttonId || `btPersonalizado${index + 1}`);
+      while (usedControlIds.has(buttonId)) buttonId = `${buttonId}X`;
+      usedControlIds.add(buttonId);
       const defaults =
         app.customButtons && typeof app.customButtons.create === "function"
-          ? app.customButtons.create({ ...button, location })
+          ? app.customButtons.create({ ...button, location, buttonId })
           : {};
       const normalized = {
         ...defaults,
         ...button,
+        buttonId,
         id,
         location
       };
@@ -592,6 +627,10 @@
         result.settings.gridConsultButtonLine ?? result.settings.consultButtonLine,
         1
       );
+      result.settings.gridFinalFocus =
+        String(
+          result.settings.gridFinalFocus ?? result.settings.finalFocus ?? "auto"
+        ).trim() || "auto";
       result.columns = (Array.isArray(result.columns) ? result.columns : []).map(
         (column, index) => {
           const defaults =
@@ -617,6 +656,17 @@
             id: column.id || defaults.id || app.utils.createId(),
             type: normalizeGridColumnType(column.type || defaults.type)
           };
+
+          if (
+            normalizedColumn.workPiece === undefined ||
+            normalizedColumn.workPiece === null ||
+            normalizedColumn.workPiece === ""
+          ) {
+            normalizedColumn.workPiece =
+              normalizedColumn.recordKey === true || normalizedColumn.displayOnly === true
+                ? 0
+                : index + 1;
+          }
 
           if (normalizedColumn.type === "checkheader") {
             normalizedColumn.title = String(column.title || "");
@@ -719,7 +769,18 @@
 
     setInput("useBtnManter", settings.useBtnManter);
     setInput("btnManterColumn", settings.btnManterColumn);
+    if (settings.btnManterAlignment) setInput("btnManterAlignment", settings.btnManterAlignment);
     setInput("btnManterLine", settings.btnManterLine);
+
+    if (settings.lockTimeout !== undefined) {
+      setInput("lockTimeout", settings.lockTimeout);
+    }
+
+    setInput("generateOwnF7", settings.generateOwnF7);
+
+    if (settings.ownF7DescriptionFieldId && app.el.ownF7DescriptionField) {
+      app.el.ownF7DescriptionField.dataset.pendente = settings.ownF7DescriptionFieldId;
+    }
 
     setInput("saveInterfaceFiles", settings.saveInterfaceFiles);
     setInput("saveRuleFiles", settings.saveRuleFiles);
@@ -781,6 +842,7 @@
     app.state.activeMacRoutine = normalized.activeMacRoutine;
     app.state.activeRuleRoutine = normalized.activeRuleRoutine;
     app.state.layoutSuggestions = normalized.layoutSuggestions;
+    app.state.ruleHooks = clone(documentValue.state?.ruleHooks) || {};
     app.state.gridColumns = [];
 
     if (app.grid && typeof app.grid.ensureLocation === "function") {

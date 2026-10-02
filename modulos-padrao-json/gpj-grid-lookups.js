@@ -107,21 +107,19 @@
         "set sc=$$VerCondicaoVenda^CCFTRG001(codEmpresa,{value},.CSCV)",
         "if sc'=1 quit sc",
         ";",
-        "set DESCVEN=$piece(CSCV,Z,1)"
+        "set DESCVEN=$piece(CSCV,Z,12)"
       ].join("\n"),
       displayExpression: "DESCVEN",
       f7Routine: "%CSCV^CCPV299",
       extraVariables: "CSCV,DESCVEN",
       ruleVariables: "CSCV,DESCVEN",
       valcpCode: [
-        "set sc=$$ValidarCampoCondicaoVenda^{rgRoutine}({company},{reference},.DESCVEN)",
-        "if $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0",
-        ";",
         "set sc=$$VerCondicaoVenda^CCFTRG001({company},{reference},.CSCV)",
         "if sc'=1 do ME^%CSUTICSP(sc) quit 0",
         ";",
         "if $piece(CSCV,Z,16)=0 do ME^%CSUTIUD(\"Condição de venda inativa!\") quit 0",
         ";",
+        "set DESCVEN=$piece(CSCV,Z,12)",
         "do TbSet^%CSW1UTI({gridLine},{gridColumn},DESCVEN,,,,,{gridCode})"
       ].join("\n")
     },

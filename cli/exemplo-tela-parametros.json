@@ -1,0 +1,222 @@
+{
+  "routine": {
+    "name": "WDOMTESTEROM100ATAB2A",
+    "title": "Configuração dos Insumos da Engenharia para Romaneio de Carga",
+    "mode": "grid",
+    "useTabs": false,
+    "useRules": true,
+    "rgRoutineName": "WDOMTESTEROM100ATAB2ARG",
+    "entityName": "ComponenteChecklist",
+    "globalName": "WDOMTESTEROMC",
+    "dataVariable": "WDOMTESTEROM100ATAB2A",
+    "useRoutineCompany": false,
+    "useBtnManter": false,
+    "width": 108,
+    "height": 28
+  },
+  "fields": [
+    {
+      "id": "emp",
+      "description": "Empresa",
+      "variable": "CODEMP",
+      "type": "integer",
+      "tabId": "parent",
+      "isKey": true,
+      "disabled": true,
+      "inputSize": 4,
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 10,
+      "inputColumn": 11,
+      "inputLine": 1,
+      "displayLine": 1
+    },
+    {
+      "id": "chk",
+      "description": "Checklist",
+      "variable": "CODCHK",
+      "type": "integer",
+      "tabId": "parent",
+      "isKey": true,
+      "disabled": true,
+      "inputSize": 8,
+      "labelColumn": 20,
+      "labelLine": 1,
+      "labelSize": 9,
+      "inputColumn": 29,
+      "inputLine": 1
+    },
+    {
+      "id": "eng",
+      "description": "Engenharia",
+      "variable": "CODENG",
+      "type": "string",
+      "tabId": "parent",
+      "isKey": true,
+      "disabled": true,
+      "inputSize": 16,
+      "hasDisplay": true,
+      "displayLoadMode": "valcp",
+      "valcpCode": "do Set^%CSW1UTI(%PRG,\"{display}\",$$ObterDescricaoEngenharia^WDOMTESTEROM100ATAB2ARG(CODEMP,{reference}))",
+      "labelColumn": 1,
+      "labelLine": 2,
+      "labelSize": 10,
+      "inputColumn": 11,
+      "inputLine": 2,
+      "displayLine": 2,
+      "displayColumn": 29,
+      "displaySize": 60
+    }
+  ],
+  "indexes": [
+    {
+      "type": "fixed",
+      "fixedValue": "1"
+    },
+    {
+      "type": "key",
+      "fieldId": "emp",
+      "parameterName": "codEmpresa"
+    },
+    {
+      "type": "fixed",
+      "fixedValue": "1"
+    },
+    {
+      "type": "key",
+      "fieldId": "chk",
+      "parameterName": "codChecklist"
+    },
+    {
+      "type": "fixed",
+      "fixedValue": "4"
+    },
+    {
+      "type": "key",
+      "fieldId": "eng",
+      "parameterName": "codEngenharia"
+    }
+  ],
+  "grid": {
+    "location": "parent",
+    "code": 41,
+    "line": 3,
+    "height": 19,
+    "startLine": 4,
+    "endLine": 21,
+    "maintenance": true,
+    "allowInsert": false,
+    "allowRemove": false,
+    "consultButton": {
+      "enabled": false
+    },
+    "columns": [
+      {
+        "title": "Seq",
+        "type": "n",
+        "width": 4,
+        "variable": "SEQLIN",
+        "recordKey": true,
+        "editable": false
+      },
+      {
+        "title": "Nível",
+        "type": "a",
+        "width": 10,
+        "variable": "NIVEL",
+        "workPiece": 1
+      },
+      {
+        "title": "Item",
+        "type": "a",
+        "width": 18,
+        "variable": "CODITE",
+        "workPiece": 7
+      },
+      {
+        "title": "Descrição",
+        "type": "a",
+        "width": 40,
+        "variable": "DESITE",
+        "workPiece": 3
+      },
+      {
+        "title": "Unidade",
+        "type": "a",
+        "width": 5,
+        "variable": "UNIDAD",
+        "workPiece": 4
+      },
+      {
+        "title": "Quantidade",
+        "type": "v3",
+        "width": 12,
+        "variable": "QTDITE",
+        "workPiece": 5
+      },
+      {
+        "title": "Acoplado",
+        "type": "a",
+        "width": 8,
+        "variable": "ACOPLA",
+        "workPiece": 6,
+        "editable": true,
+        "required": true,
+        "maintenanceType": "combo",
+        "optionsVariable": "TABACO",
+        "createOptionsTable": true,
+        "optionsItems": [
+          {
+            "value": "S",
+            "description": "Sim"
+          },
+          {
+            "value": "N",
+            "description": "Não"
+          }
+        ]
+      }
+    ]
+  },
+  "buttons": [
+    {
+      "id": "conf",
+      "text": "C<u>o</u>nfirmar",
+      "buttonId": "btConfirmarInsumo",
+      "shortcut": "o",
+      "icon": "check",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3500",
+      "positionMode": "manual",
+      "column": 70,
+      "line": 27,
+      "size": 12,
+      "actionCode": "set sc=$$GravarComponentesChecklist^WDOMTESTEROM100ATAB2ARG(CODEMP,CODCHK,CODENG,CT)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit\ndo MECABECALHO^%CSW1UTI(\"Configuração dos insumos gravada!\")\ngoto 9999"
+    },
+    {
+      "id": "sair",
+      "text": "<u>S</u>air",
+      "buttonId": "btSair",
+      "shortcut": "s",
+      "icon": "back",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3510",
+      "positionMode": "manual",
+      "column": 84,
+      "line": 27,
+      "size": 12,
+      "actionCode": "goto 9999"
+    }
+  ],
+  "ruleHooks": {
+    "entryParameters": [
+      "CODEMP",
+      "CODCHK",
+      "CODENG"
+    ],
+    "workGlobalCode": "; Explosão da engenharia (CCPMERG007) + acoplado já gravado (padrão S)\nnew tabExplosao,ordem,dados,componente,codEditado,descricao,unidade,gravado,acoplado,scDescricao,codLinha\nset sc=$$GerarExplosaoEstruturadaEng^CCPMERG007(codEmpresa,term,codEngenharia,.tabExplosao)\nif $$$ISERR(sc) quit sc\n;\nset (ordem,codLinha)=\"\"\nfor  set ordem=$order(tabExplosao(ordem)) quit:ordem=\"\"!$$$ISERR(sc)  do\n. set dados=tabExplosao(ordem)\n. set componente=$piece(dados,Z,1)\n. set (codEditado,descricao,unidade)=\"\"\n. set scDescricao=$$ObterDescEngItem^CCPMERG001(codEmpresa,componente,.codEditado,.descricao,.unidade)\n. set gravado=$get(^WDOMTESTEROMC(1,codEmpresa,1,codChecklist,4,codEngenharia,componente))\n. set acoplado=$select($piece(gravado,Z,4)'=\"\":$piece(gravado,Z,4),1:\"S\")\n. set {mtemp}=$piece(dados,Z,4)_Z_componente_Z_descricao_Z_unidade_Z_($piece(dados,Z,3)/1000000)_Z_acoplado_Z_codEditado\n. set codLinha=codLinha+1\n. set sc=$$GravarGlobalTrabalho(term,codLinha,{mtemp})",
+    "extraMethods": "; Gravar Componentes do Checklist (acoplado S/N por componente da engenharia)\n;\n; set sc=$$GravarComponentesChecklist^WDOMTESTEROM100ATAB2ARG(codEmpresa,codChecklist,codEngenharia,term)\nGravarComponentesChecklist(codEmpresa,codChecklist,codEngenharia,term)\t;\n$$$VAR\nnew codSequencia,linha,dados,dataHora,codOperador\n;\nif $get(codEngenharia)=\"\" quit $$$ERROR(10000,\"Engenharia não informada!\")\n;\nset dataHora=$$$horologEmp(codEmpresa)\nset codOperador=$$VEROP^%CSUTIUD(1)\n;\ndo $$$KillG(^WDOMTESTEROMC(1,codEmpresa,1,codChecklist,4,codEngenharia))\n;\nset codSequencia=\"\"\nfor  set codSequencia=$order(^mtempWDOMTESTEROM100ATAB2A(term,codSequencia)) quit:codSequencia=\"\"  do\n. set linha=$get(^mtempWDOMTESTEROM100ATAB2A(term,codSequencia))\n. set dados=dataHora_Z_codOperador_Z_codSequencia_Z_$piece(linha,Z,6)\n. do $$$SetG(^WDOMTESTEROMC(1,codEmpresa,1,codChecklist,4,codEngenharia,$piece(linha,Z,2)),dados)\n;\nquit $$$OK\n;\n; Obter Descrição da Engenharia\n;\n; set descricao=$$ObterDescricaoEngenharia^WDOMTESTEROM100ATAB2ARG(codEmpresa,codEngenharia)\nObterDescricaoEngenharia(codEmpresa,codEngenharia)\t;\n$$$VAR\nnew sc,codEditado,descricao,unidade\n;\nif $get(codEngenharia)=\"\" quit \"\"\nset (codEditado,descricao,unidade)=\"\"\nset sc=$$ObterDescEngItem^CCPMERG001(codEmpresa,codEngenharia,.codEditado,.descricao,.unidade)\n;\nquit $select(codEditado'=\"\":codEditado_\" - \",1:\"\")_descricao"
+  }
+}

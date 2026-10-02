@@ -1,0 +1,112 @@
+{
+  "routine": {
+    "name": "WDOMTESTEAA",
+    "title": "Configuração Geral de Pedido",
+    "mode": "crud",
+    "dataVariable": "WDOMPVCFG",
+    "useTabs": true,
+    "useRules": true,
+    "rgRoutineName": "WDOMTESTEAARG",
+    "entityName": "CfgProntaEntrega",
+    "globalName": "WDOMPVCFG",
+    "useRoutineCompany": false,
+    "useBtnManter": true,
+    "generateDelete": true,
+    "width": 108,
+    "height": 28
+  },
+  "tabs": [
+    {
+      "id": "pe",
+      "title": "Pronta Entrega",
+      "routineName": "WDOMTESTEAATAB1",
+      "dataVariable": "WDOMPVCFGPE",
+      "globalSubscript": "1",
+      "contentType": "fields"
+    }
+  ],
+  "fields": [
+    {
+      "id": "emp",
+      "description": "Empresa",
+      "variable": "CODEMP",
+      "type": "integer",
+      "tabId": "parent",
+      "isKey": true,
+      "required": true,
+      "inputSize": 4,
+      "lookupPreset": "empresa",
+      "hasDisplay": true,
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 18,
+      "inputColumn": 20,
+      "inputLine": 1,
+      "displayLine": 1,
+      "displayColumn": 26,
+      "displaySize": 30
+    },
+    {
+      "id": "nat",
+      "description": "Natureza",
+      "variable": "CODNAT",
+      "type": "integer",
+      "tabId": "pe",
+      "required": true,
+      "inputSize": 8,
+      "lookupPreset": "custom",
+      "f7Routine": "ESANAT^CCPV299",
+      "extraVariables": "ESANAT",
+      "hasDisplay": true,
+      "displayLoadMode": "valcp",
+      "valcpCode": "set sc=$$VerNaturezaEstoque^CCESARG001(CODEMP,{reference},.ESANAT)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0\n;\ndo Set^%CSW1UTI(%PRG,\"{display}\",$piece(ESANAT,Z,1))",
+      "tabKey": true,
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 18,
+      "inputColumn": 20,
+      "inputLine": 1,
+      "displayLine": 1,
+      "displayColumn": 30,
+      "displaySize": 30
+    },
+    {
+      "id": "sit",
+      "description": "Situação Etiqueta",
+      "variable": "SITETQ",
+      "type": "multiSelect",
+      "tabId": "pe",
+      "required": true,
+      "inputSize": 8,
+      "hasDisplay": false,
+      "lookupPreset": "none",
+      "extraVariables": "",
+      "multiSelectTableVariable": "TABSITSEL",
+      "multiSelectSelectedText": "Selecionadas",
+      "displayLoadMode": "valcp",
+      "valcpCode": "",
+      "labelColumn": 1,
+      "labelLine": 2,
+      "labelSize": 18,
+      "inputColumn": 20,
+      "inputLine": 2,
+      "displayLine": 2,
+      "displayColumn": 26,
+      "displaySize": 30,
+      "multiSelectSource": "lista",
+      "multiSelectOptionsVariable": "TABSIT",
+      "multiSelectOptionsLoad": "set sc=$$ObterSitEtiqueta^CCTTGARG001(CODEMP,1,.TABSIT)"
+    }
+  ],
+  "indexes": [
+    {
+      "type": "fixed",
+      "fixedValue": "2"
+    },
+    {
+      "type": "key",
+      "fieldId": "emp",
+      "parameterName": "codEmpresa"
+    }
+  ]
+}

@@ -470,16 +470,124 @@
     lines.push("\t#include %CSUTICSP");
     lines.push("\t;");
 
-    definitions.forEach((definition) => appendDefinition(lines, definition));
+    definitions.forEach((definition) =>
+      definition.own
+        ? appendOwnLookup(lines, definition)
+        : appendDefinition(lines, definition)
+    );
 
     lines.push("\t; csw:csp:rotina299");
     return lines.join("\n");
   }
 
+  function ownLookupField(config = app.getConfig()) {
+    const id = String(config.ownF7DescriptionFieldId || "").trim();
+    if (!id) return null;
+
+    return state.fields.find((field) => field.id === id) || null;
+  }
+
+  function ownLookupGlobal(config = app.getConfig()) {
+    const subscripts = [];
+
+    if (config.useRoutineCompany) subscripts.push("CODEMP");
+
+    const keys = app.indexes.effectiveKeyDefinitions(config);
+    const lastKeyId = keys.length ? keys[keys.length - 1].field.id : "";
+
+    state.globalIndexes.forEach((index) => {
+      if (index.type === "fixed") {
+        subscripts.push(String(index.fixedValue || "1").trim());
+        return;
+      }
+
+      const definition = keys.find(({ field }) => field.id === index.fieldId);
+      if (!definition) return;
+
+      subscripts.push(
+        definition.field.id === lastKeyId
+          ? "@1"
+          : u.normalizeVariable(definition.field.variable)
+      );
+    });
+
+    if (!subscripts.includes("@1")) subscripts.push("@1");
+
+    return `^${u.normalizeVariable(config.globalName, "GLOBAL")}(${subscripts.join(",")})`;
+  }
+
+  function ownLookupDefinition(config = app.getConfig()) {
+    if (!config.generateOwnF7) return null;
+
+    const descriptionField = ownLookupField(config);
+    if (!descriptionField) return null;
+
+    const assignment = app.fields.pieceAssignments(config).get(descriptionField.id);
+    if (!assignment) return null;
+
+    const keys = app.indexes.effectiveKeyDefinitions(config);
+    const keyField = keys.length ? keys[keys.length - 1].field : null;
+
+    const label = u.normalizeVariable(
+      config.ownF7Label,
+      u.normalizeVariable(config.entityName, "CADASTRO")
+    ).slice(0, 20);
+
+    return {
+      own: true,
+      label,
+      entity: config.title || config.entityName || label,
+      returnLabel: `${label}PE1`,
+      routineName: suggestedRoutineName(config),
+      company: config.useRoutineCompany === true,
+      allGlobal: ownLookupGlobal(config),
+      columnSizes: `${Math.max(2, Number(keyField && keyField.inputSize) || 7)},${Math.max(10, Number(descriptionField.inputSize) || 40)}`,
+      pieces: String(assignment.piece),
+      titles: `${u.sanitize((keyField && keyField.description) || "Código")},${u.sanitize(descriptionField.description || "Descrição")}`,
+      rows: Math.max(5, Number(config.ownF7Rows) || 15)
+    };
+  }
+
+  function appendOwnLookup(lines, definition) {
+    lines.push(`\t; F7 de ${u.sanitize(definition.entity || definition.label)}`);
+    lines.push("\t;");
+    lines.push(`${definition.label}${definition.company ? "(CODEMP)" : ""}\t;`);
+
+    const parameters = [
+      `"${u.escapeMac(definition.columnSizes)}"`,
+      `"${u.escapeMac(definition.pieces)}"`,
+      `"${u.escapeMac(definition.titles)}"`,
+      String(definition.rows),
+      `"${u.escapeMac(definition.allGlobal)}"`,
+      '"%codret"',
+      "",
+      "",
+      "",
+      "",
+      `"${definition.returnLabel}^${definition.routineName}"`
+    ];
+
+    lines.push(`\tdo ^%CSUTIPE(${parameters.join(",")})`);
+    lines.push("\tquit:$$CSP^%CSW1UTI()");
+    lines.push("\t;");
+    lines.push(`${definition.returnLabel}\t;`);
+    lines.push("\tdo SetF7^%CSW1UTI(%codret)");
+    lines.push("\tquit");
+    lines.push("\t;");
+  }
+
   function generateAll(config = app.getConfig()) {
     const result = {};
+    const grouped = uniqueDefinitions(config);
 
-    uniqueDefinitions(config).forEach((definitions, routineName) => {
+    const own = ownLookupDefinition(config);
+    if (own) {
+      const existentes = grouped.get(own.routineName) || [];
+      if (!existentes.some((item) => item.label === own.label)) existentes.push(own);
+      grouped.set(own.routineName, existentes);
+    }
+
+    grouped.forEach((definitions, routineName) => {
       result[`f7-${routineName}`] = {
         label: "Consultas F7 — rotina 299",
         routineName,
@@ -500,6 +608,7 @@
     syncFields,
     renderAllGlobal,
     renderPersistedSelectedGlobal,
+    ownLookupDefinition,
     generateAll
   };
 })(window.GeradorRotinasJsonPadrao);

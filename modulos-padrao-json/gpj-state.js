@@ -10,6 +10,7 @@ window.GeradorRotinasJsonPadrao = {
     activePreview: "parent",
     activeMacRoutine: "parent",
     activeRuleRoutine: "rg",
+    ruleHooks: {},
     layoutSuggestions: {
       tabPanelLineAuto: true,
       tabPanelHeightAuto: true,

@@ -1,0 +1,139 @@
+{
+  "routine": {
+    "name": "WDOMTESTECOM120",
+    "title": "Detalhamento do Faturamento",
+    "mode": "grid",
+    "useTabs": false,
+    "useRules": true,
+    "rgRoutineName": "WDOMTESTECOM120RG",
+    "entityName": "DetalheFaturamento",
+    "globalName": "mtempWDOMTESTECOM120",
+    "dataVariable": "WDOMTESTECOM120",
+    "useRoutineCompany": true,
+    "useBtnManter": false,
+    "generateSave": false,
+    "width": 108,
+    "height": 28
+  },
+  "fields": [
+    {
+      "id": "mes",
+      "description": "Mês/Ano",
+      "variable": "MESANO",
+      "type": "string",
+      "tabId": "parent",
+      "required": true,
+      "inputSize": 7,
+      "valcpCode": "if {reference}'?2N1\"/\"4N do ME^%CSUTIUD(\"Mês/Ano: informe no formato MM/AAAA!\") quit 0",
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 6,
+      "inputColumn": 7,
+      "inputLine": 1
+    }
+  ],
+  "indexes": [],
+  "grid": {
+    "location": "parent",
+    "code": 41,
+    "line": 3,
+    "lineAuto": false,
+    "height": 20,
+    "startLine": 4,
+    "endLine": 22,
+    "consultButton": {
+      "enabled": true,
+      "column": 92,
+      "line": 1
+    },
+    "columns": [
+      {
+        "title": "Segmento/Descrição",
+        "type": "a",
+        "width": 14,
+        "variable": "SEGLIN",
+        "workPiece": 1
+      },
+      {
+        "title": "Cliente/Descrição",
+        "type": "a",
+        "width": 18,
+        "variable": "CLILIN",
+        "workPiece": 2
+      },
+      {
+        "title": "Documento",
+        "type": "n",
+        "width": 7,
+        "variable": "DOCLIN",
+        "workPiece": 3
+      },
+      {
+        "title": "Data",
+        "type": "d",
+        "width": 7,
+        "variable": "DATLIN",
+        "workPiece": 4
+      },
+      {
+        "title": "Item/Máscara/Descrição/Unidade",
+        "type": "a",
+        "width": 26,
+        "variable": "ITELIN",
+        "workPiece": 5
+      },
+      {
+        "title": "Quantidade",
+        "type": "v3",
+        "width": 8,
+        "variable": "QTDLIN",
+        "workPiece": 6
+      },
+      {
+        "title": "Vlr Unit. Faturado",
+        "type": "v2",
+        "width": 8,
+        "variable": "UNILIN",
+        "workPiece": 7
+      },
+      {
+        "title": "Vlr Bruto Faturado",
+        "type": "v2",
+        "width": 9,
+        "variable": "BRULIN",
+        "workPiece": 8
+      },
+      {
+        "title": "Vlr Impostos",
+        "type": "v2",
+        "width": 8,
+        "variable": "IMPLIN",
+        "workPiece": 9
+      },
+      {
+        "title": "Vlr Líquido Faturado",
+        "type": "v2",
+        "width": 9,
+        "variable": "LIQLIN",
+        "workPiece": 10
+      },
+      {
+        "title": "Linha",
+        "type": "n",
+        "width": 1,
+        "variable": "SEQLIN",
+        "recordKey": true
+      }
+    ]
+  },
+  "ruleHooks": {
+    "entryParameters": [
+      "CODSEG:codSegmento",
+      "CODCLI:codCliente",
+      "MESANO"
+    ],
+    "initializeCode": "",
+    "workGlobalCode": "; Notas do cliente no mês, tipos de nota e máscaras acabado/revenda do segmento\nset sc=$$CarregarDetalhe(term,codEmpresa,codSegmento,codCliente,mesAno)",
+    "extraMethods": "; Carregar as notas: segmento^cliente^nota^data^item/máscara/descrição/unidade^qtd^unitário^bruto^impostos^líquido\n;\n; set sc=$$CarregarDetalhe^WDOMTESTECOM120RG(term,codEmpresa,codSegmento,codCliente,mesAno)\nCarregarDetalhe(term,codEmpresa,codSegmento,codCliente,mesAno)\t;\n$$$VAR\nnew sc,anoMes,tabNota,n,nota,cgigen,segmento,cliente,bruto,impostos\n;\nif $get(mesAno)'?2N1\"/\"4N quit $$$ERROR(10000,\"Mês/Ano: informe no formato MM/AAAA!\")\nset anoMes=$piece(mesAno,\"/\",2)_$piece(mesAno,\"/\",1)\nkill ^||WDOMTESTECOMMASC\nset sc=$$ObterItensFaturados^WDOMTESTECOM110RG(codEmpresa,codSegmento,codCliente,anoMes,.tabNota)\nif $$$ISERR(sc) quit sc\n;\nset segmento=codSegmento_\" - \"_$piece($get(^WDOMTESTECOMCFG(1,codEmpresa,1,codSegmento)),Z,3)\nset cliente=codCliente_\" - \"_$$NomeCliente^WDOMTESTECOM110RG(codEmpresa,codCliente)\nset n=\"\"\nfor  set n=$order(tabNota(n)) quit:n=\"\"!$$$ISERR(sc)  do\n. set nota=tabNota(n)\n. set sc=$$VerItemCGIGEN^CCCGIRG001(codEmpresa,$piece(nota,Z,4),.cgigen)\n. set bruto=$piece(nota,Z,6),impostos=$piece(nota,Z,7)\n. set linha=segmento_Z_cliente_Z_$piece(nota,Z,2)_Z_$piece(nota,Z,1)\n. set linha=linha_Z_$piece(nota,Z,4)_\" / \"_$piece($get(^CGISAI(codEmpresa,$piece(nota,Z,4))),Z,1)_\" / \"_$piece($get(cgigen),Z,1)_\" / \"_$piece($get(cgigen),Z,2)\n. set linha=linha_Z_$piece(nota,Z,5)_Z_$piece(nota,Z,8)_Z_bruto_Z_impostos_Z_(bruto-impostos)\n. set sc=$$GravarGlobalTrabalho(term,n,linha)\n;\nquit sc"
+  }
+}

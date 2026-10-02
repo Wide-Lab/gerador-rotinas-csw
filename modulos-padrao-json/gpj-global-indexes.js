@@ -48,6 +48,10 @@
     return keyDefinitions().some(({ field }) => isCompanyField(field));
   }
 
+  function hasCompanyIndex() {
+    return state.globalIndexes.some((index) => index.type === "company");
+  }
+
   function usesRoutineCompany(config = app.getConfig()) {
     // Empresa é obrigatória nas globais. Sem campo CODEMP, CE vira a origem
     // automaticamente, mesmo em projetos antigos que ainda não têm a opção.
@@ -203,9 +207,13 @@
     );
     const indexes = [];
 
-    if (usesRoutineCompany(config)) indexes.push("codEmpresa");
+    if (usesRoutineCompany(config) && !hasCompanyIndex()) indexes.push("codEmpresa");
 
     state.globalIndexes.forEach((index) => {
+      if (index.type === "company") {
+        if (usesRoutineCompany(config)) indexes.push("codEmpresa");
+        return;
+      }
       if (index.type === "fixed") {
         indexes.push(index.fixedValue.trim() || "1");
         return;

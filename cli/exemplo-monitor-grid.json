@@ -1,0 +1,526 @@
+{
+  "routine": {
+    "name": "WDOMREQ100",
+    "title": "Monitor de Requisição de Materiais",
+    "mode": "grid",
+    "dataVariable": "WDOMREQ100",
+    "useTabs": false,
+    "useRules": true,
+    "rgRoutineName": "WDOMREQ100RG",
+    "entityName": "Requisicao",
+    "globalName": "WDOMREQ100",
+    "useRoutineCompany": true,
+    "useBtnManter": false,
+    "width": 108,
+    "height": 28
+  },
+  "fields": [
+    {
+      "id": "dtini",
+      "description": "Período de",
+      "variable": "DATINI",
+      "type": "date",
+      "tabId": "parent",
+      "labelColumn": 6,
+      "labelSize": 9,
+      "labelLine": 1,
+      "inputColumn": 15,
+      "inputLine": 1,
+      "inputSize": 8,
+      "displayLine": 1,
+      "displayColumn": 25,
+      "displaySize": 20
+    },
+    {
+      "id": "dtfim",
+      "description": "até",
+      "variable": "DATFIM",
+      "type": "date",
+      "tabId": "parent",
+      "labelColumn": 26,
+      "labelSize": 4,
+      "labelLine": 1,
+      "inputColumn": 30,
+      "inputLine": 1,
+      "inputSize": 8,
+      "valcpCode": "if DATINI'=\"\",{reference}'=\"\",{reference}<DATINI do ME^%CSUTIUD(\"Período: data final menor que a inicial!\") quit 0",
+      "displayLine": 1,
+      "displayColumn": 40
+    },
+    {
+      "id": "tipo",
+      "description": "Tipo de Requisição",
+      "variable": "TIPREQ",
+      "type": "multiSelect",
+      "tabId": "parent",
+      "multiSelectSource": "lista",
+      "multiSelectTableVariable": "SELTIPREQ",
+      "multiSelectOptionsVariable": "TABTIPREQ",
+      "multiSelectOptionsLoad": "set sc=$$ObterTabTipoRequisicao^WDOMREQ100RG(.TABTIPREQ)",
+      "multiSelectSelectedText": "Selecionados",
+      "multiSelectEmptyText": "Todos",
+      "hasDisplay": false,
+      "labelColumn": 40,
+      "labelSize": 10,
+      "labelLine": 1,
+      "inputColumn": 50,
+      "inputLine": 1,
+      "inputSize": 8,
+      "displayLine": 1,
+      "displayColumn": 60,
+      "displaySize": 20
+    },
+    {
+      "id": "sol",
+      "description": "Solicitante",
+      "variable": "CODSOL",
+      "type": "multiSelect",
+      "tabId": "parent",
+      "multiSelectSource": "lista",
+      "multiSelectTableVariable": "SELSOL",
+      "multiSelectOptionsVariable": "TABSOL",
+      "multiSelectOptionsLoad": "set sc=$$ObterTabSolicitante^WDOMREQ100RG(.TABSOL)",
+      "multiSelectSelectedText": "Selecionados",
+      "multiSelectEmptyText": "Todos",
+      "hasDisplay": false,
+      "labelColumn": 65,
+      "labelSize": 10,
+      "labelLine": 1,
+      "inputColumn": 75,
+      "inputLine": 1,
+      "inputSize": 8,
+      "displayLine": 1,
+      "displayColumn": 85,
+      "displaySize": 20
+    },
+    {
+      "id": "ctrl",
+      "description": "Controle",
+      "variable": "CONTRO",
+      "type": "string",
+      "tabId": "parent",
+      "labelColumn": 6,
+      "labelSize": 9,
+      "labelLine": 2,
+      "inputColumn": 15,
+      "inputLine": 2,
+      "inputSize": 8,
+      "displayLine": 2,
+      "displayColumn": 25,
+      "displaySize": 20
+    },
+    {
+      "id": "sit",
+      "description": "Situação",
+      "variable": "SITREQ",
+      "type": "multiSelect",
+      "tabId": "parent",
+      "multiSelectSource": "lista",
+      "multiSelectTableVariable": "SELSITREQ",
+      "multiSelectOptionsVariable": "TABSITREQ",
+      "multiSelectOptionsLoad": "set sc=$$ObterTabSituacaoRequisicao^WDOMREQ100RG(.TABSITREQ)",
+      "multiSelectSelectedText": "Selecionados",
+      "multiSelectEmptyText": "Todos",
+      "hasDisplay": false,
+      "labelColumn": 40,
+      "labelSize": 10,
+      "labelLine": 2,
+      "inputColumn": 50,
+      "inputLine": 2,
+      "inputSize": 8,
+      "displayLine": 2,
+      "displayColumn": 60,
+      "displaySize": 20
+    },
+    {
+      "id": "sta",
+      "description": "Status Requisição",
+      "variable": "STAREQ",
+      "type": "multiSelect",
+      "tabId": "parent",
+      "multiSelectSource": "lista",
+      "multiSelectTableVariable": "SELSTAREQ",
+      "multiSelectOptionsVariable": "TABSTAREQ",
+      "multiSelectOptionsLoad": "set sc=$$ObterTabStatusRequisicao^WDOMREQ100RG(.TABSTAREQ)",
+      "multiSelectSelectedText": "Selecionados",
+      "multiSelectEmptyText": "Todos",
+      "hasDisplay": false,
+      "labelColumn": 65,
+      "labelSize": 10,
+      "labelLine": 2,
+      "inputColumn": 75,
+      "inputLine": 2,
+      "inputSize": 8,
+      "displayLine": 2,
+      "displayColumn": 85,
+      "displaySize": 20
+    },
+    {
+      "id": "nat",
+      "description": "Natureza Estoque",
+      "variable": "CODNAT",
+      "type": "multiSelect",
+      "tabId": "parent",
+      "multiSelectSource": "lista",
+      "multiSelectTableVariable": "SELNAT",
+      "multiSelectOptionsVariable": "TABNAT",
+      "multiSelectOptionsLoad": "set sc=$$ObterTabNatureza^WDOMREQ100RG(CE,.TABNAT)",
+      "multiSelectSelectedText": "Selecionados",
+      "multiSelectEmptyText": "Todos",
+      "hasDisplay": false,
+      "labelColumn": 40,
+      "labelSize": 10,
+      "labelLine": 3,
+      "inputColumn": 50,
+      "inputLine": 3,
+      "inputSize": 8,
+      "displayLine": 3,
+      "displayColumn": 60,
+      "displaySize": 20
+    },
+    {
+      "id": "loc",
+      "description": "Local de Entrega",
+      "variable": "CODMAQ",
+      "type": "multiSelect",
+      "tabId": "parent",
+      "multiSelectSource": "lista",
+      "multiSelectTableVariable": "SELMAQ",
+      "multiSelectOptionsVariable": "TABMAQ",
+      "multiSelectOptionsLoad": "set sc=$$ObterTabLocalEntrega^WDOMREQ100RG(CE,.TABMAQ)",
+      "multiSelectSelectedText": "Selecionados",
+      "multiSelectEmptyText": "Todos",
+      "hasDisplay": false,
+      "labelColumn": 65,
+      "labelSize": 10,
+      "labelLine": 3,
+      "inputColumn": 75,
+      "inputLine": 3,
+      "inputSize": 8,
+      "displayLine": 3,
+      "displayColumn": 85,
+      "displaySize": 20
+    }
+  ],
+  "grid": {
+    "location": "parent",
+    "code": 41,
+    "line": 4,
+    "height": 19,
+    "startLine": 5,
+    "endLine": 22,
+    "columns": [
+      {
+        "title": "",
+        "type": "checkheader",
+        "width": 3,
+        "variable": "CHECK"
+      },
+      {
+        "title": "Requisição",
+        "type": "n",
+        "width": 8,
+        "variable": "CODREQ",
+        "recordKey": true
+      },
+      {
+        "title": "Status",
+        "type": "a",
+        "width": 10,
+        "variable": "STATUS"
+      },
+      {
+        "title": "Tipo",
+        "type": "a",
+        "width": 4,
+        "variable": "TIPO"
+      },
+      {
+        "title": "Material",
+        "type": "n",
+        "width": 10,
+        "variable": "CODMAT"
+      },
+      {
+        "title": "Descrição Material",
+        "type": "a",
+        "width": 30,
+        "variable": "DESMAT"
+      },
+      {
+        "title": "Quantidade",
+        "type": "v3",
+        "width": 10,
+        "variable": "QTDREQ"
+      },
+      {
+        "title": "Data",
+        "type": "d",
+        "width": 8,
+        "variable": "DATREQ"
+      },
+      {
+        "title": "Hora",
+        "type": "a",
+        "width": 5,
+        "variable": "HORREQ"
+      },
+      {
+        "title": "Comprado",
+        "type": "a",
+        "width": 8,
+        "variable": "COMPRA"
+      },
+      {
+        "title": "Situação",
+        "type": "a",
+        "width": 8,
+        "variable": "SITUAC"
+      },
+      {
+        "title": "Solicitante",
+        "type": "n",
+        "width": 6,
+        "variable": "SOLICI"
+      },
+      {
+        "title": "Nome Solicitante",
+        "type": "a",
+        "width": 25,
+        "variable": "NOMSOL"
+      },
+      {
+        "title": "Estoque Almoxarifado",
+        "type": "a",
+        "width": 12,
+        "variable": "ESTALM"
+      },
+      {
+        "title": "Centro de Custo",
+        "type": "n",
+        "width": 8,
+        "variable": "CODCC"
+      },
+      {
+        "title": "Descrição Centro de Custo",
+        "type": "a",
+        "width": 25,
+        "variable": "DESCC"
+      },
+      {
+        "title": "Natureza Requisitou",
+        "type": "n",
+        "width": 6,
+        "variable": "NATREQ"
+      },
+      {
+        "title": "Descrição",
+        "type": "a",
+        "width": 30,
+        "variable": "DESREQ"
+      },
+      {
+        "title": "Natureza OF",
+        "type": "n",
+        "width": 6,
+        "variable": "NATOF"
+      },
+      {
+        "title": "Número de Controle",
+        "type": "a",
+        "width": 15,
+        "variable": "NUMCTR"
+      },
+      {
+        "title": "Nome do Cliente",
+        "type": "a",
+        "width": 30,
+        "variable": "NOMCLI"
+      },
+      {
+        "title": "Local de Entrega",
+        "type": "n",
+        "width": 8,
+        "variable": "LOCENT"
+      },
+      {
+        "title": "Data da Requisição Original",
+        "type": "d",
+        "width": 10,
+        "variable": "DATORI"
+      },
+      {
+        "title": "Dias em Aberto",
+        "type": "n",
+        "width": 5,
+        "variable": "DIASAB"
+      }
+    ],
+    "consultButton": {
+      "enabled": true,
+      "column": 90,
+      "line": 1
+    }
+  },
+  "buttons": [
+    {
+      "id": "b1",
+      "text": "Separar Requisição",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3500",
+      "positionMode": "manual",
+      "column": 13,
+      "line": 26,
+      "size": 12,
+      "initialState": 0,
+      "icon": "box"
+    },
+    {
+      "id": "b2",
+      "text": "Atender Requisição",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3510",
+      "positionMode": "manual",
+      "column": 27,
+      "line": 26,
+      "size": 12,
+      "initialState": 0,
+      "icon": "check"
+    },
+    {
+      "id": "b3",
+      "text": "Excluir Requisição",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3520",
+      "positionMode": "manual",
+      "column": 41,
+      "line": 26,
+      "size": 12,
+      "initialState": 0,
+      "icon": "trash"
+    },
+    {
+      "id": "b4",
+      "text": "Estornar Requisição",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3530",
+      "positionMode": "manual",
+      "column": 55,
+      "line": 26,
+      "size": 12,
+      "initialState": 0,
+      "icon": "back"
+    },
+    {
+      "id": "b5",
+      "text": "Problema",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3540",
+      "positionMode": "manual",
+      "column": 69,
+      "line": 26,
+      "size": 12,
+      "initialState": 0,
+      "icon": "announcement"
+    },
+    {
+      "id": "b6",
+      "text": "Imprimir",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3550",
+      "positionMode": "manual",
+      "column": 83,
+      "line": 26,
+      "size": 12,
+      "initialState": 0,
+      "icon": ""
+    },
+    {
+      "id": "b7",
+      "text": "Marcar/Desmarcar",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3560",
+      "positionMode": "manual",
+      "column": 13,
+      "line": 27,
+      "size": 12,
+      "initialState": 0,
+      "icon": "edit"
+    },
+    {
+      "id": "b8",
+      "text": "Solicitação de Compra",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3570",
+      "positionMode": "manual",
+      "column": 27,
+      "line": 27,
+      "size": 12,
+      "initialState": 0,
+      "icon": "cart"
+    },
+    {
+      "id": "b9",
+      "text": "Pedido de Compra",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3580",
+      "positionMode": "manual",
+      "column": 41,
+      "line": 27,
+      "size": 12,
+      "initialState": 0,
+      "icon": "cart"
+    },
+    {
+      "id": "b10",
+      "text": "Estoque",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3590",
+      "positionMode": "manual",
+      "column": 55,
+      "line": 27,
+      "size": 12,
+      "initialState": 0,
+      "icon": "box"
+    },
+    {
+      "id": "b11",
+      "text": "OF",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3600",
+      "positionMode": "manual",
+      "column": 69,
+      "line": 27,
+      "size": 12,
+      "initialState": 0,
+      "icon": ""
+    },
+    {
+      "id": "b12",
+      "text": "Cancelar Impressão",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3610",
+      "positionMode": "manual",
+      "column": 83,
+      "line": 27,
+      "size": 12,
+      "initialState": 0,
+      "icon": "stop"
+    }
+  ],
+  "ruleHooks": {
+    "extraMethods": "; Obter Tabela de Tipo Requisicao\n;\n; set sc=$$ObterTabTipoRequisicao^WDOMREQ100RG(.tabTipoRequisicao)\nObterTabTipoRequisicao(tabOpcoes)\t;\n$$$VAR\n;\nkill tabOpcoes\n;\nset tabOpcoes(\"T\")=\"T-Independente de Transferência\"\nset tabOpcoes(\"S\")=\"S-Independente de Saída\"\nset tabOpcoes(\"O\")=\"O-Requisição de OF\"\nset tabOpcoes(\"C\")=\"C-Complementar de OF\"\n;\nquit $$$OK\n;\n; Obter Tabela de Situacao Requisicao\n;\n; set sc=$$ObterTabSituacaoRequisicao^WDOMREQ100RG(.tabSituacaoRequisicao)\nObterTabSituacaoRequisicao(tabOpcoes)\t;\n$$$VAR\n;\nkill tabOpcoes\n;\nset tabOpcoes(\"A\")=\"A-Aberto\"\nset tabOpcoes(\"T\")=\"T-Atendido\"\n;\nquit $$$OK\n;\n; Obter Tabela de Status Requisicao\n;\n; set sc=$$ObterTabStatusRequisicao^WDOMREQ100RG(.tabStatusRequisicao)\nObterTabStatusRequisicao(tabOpcoes)\t;\n$$$VAR\n;\nkill tabOpcoes\n;\nset tabOpcoes(\"1\")=\"1-Aberto\"\nset tabOpcoes(\"2\")=\"2-Aguardando\"\nset tabOpcoes(\"3\")=\"3-Separação\"\nset tabOpcoes(\"4\")=\"4-Separado\"\nset tabOpcoes(\"5\")=\"5-Baixado\"\n;\nquit $$$OK\n;\n; Obter Tabela de Solicitante\n;\n; set sc=$$ObterTabSolicitante^WDOMREQ100RG(.tabSolicitante)\nObterTabSolicitante(tabSolicitante)\t;\n$$$VAR\nnew codigo\n;\nkill tabSolicitante\n;\nset codigo=\"\"\nfor  set codigo=$order(^%CSMENOP(codigo)) quit:codigo=\"\"  set tabSolicitante(codigo)=codigo_\"-\"_$piece($get(^%CSMENOP(codigo)),Z,1)\n;\nquit $$$OK\n;\n; Obter Tabela de Local Entrega\n;\n; set sc=$$ObterTabLocalEntrega^WDOMREQ100RG(codEmpresa,.tabLocalEntrega)\nObterTabLocalEntrega(codEmpresa,tabLocalEntrega)\t;\n$$$VAR\nnew codigo\n;\nkill tabLocalEntrega\n;\nset codigo=\"\"\nfor  set codigo=$order(^ESMMAQ(codEmpresa,1,codigo)) quit:codigo=\"\"  set tabLocalEntrega(codigo)=codigo_\"-\"_$piece($get(^ESMMAQ(codEmpresa,1,codigo)),Z,1)\n;\nquit $$$OK\n;\n; Obter Tabela de Natureza\n;\n; set sc=$$ObterTabNatureza^WDOMREQ100RG(codEmpresa,.tabNatureza)\nObterTabNatureza(codEmpresa,tabNatureza)\t;\n$$$VAR\nnew codigo\n;\nkill tabNatureza\n;\nset codigo=\"\"\nfor  set codigo=$order(^ESANAT(codEmpresa,codigo)) quit:codigo=\"\"  set tabNatureza(codigo)=codigo_\"-\"_$piece($get(^ESANAT(codEmpresa,codigo)),Z,1)\n;\nquit $$$OK\n;"
+  }
+}

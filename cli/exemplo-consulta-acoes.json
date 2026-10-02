@@ -1,0 +1,188 @@
+{
+  "routine": {
+    "name": "WDOMTESTEROM110",
+    "title": "Romaneio de Carga",
+    "mode": "grid",
+    "useTabs": false,
+    "useRules": true,
+    "rgRoutineName": "WDOMTESTEROM110RG",
+    "entityName": "Romaneio",
+    "globalName": "WDOMTESTEROMC",
+    "dataVariable": "WDOMTESTEROM110",
+    "useRoutineCompany": false,
+    "useBtnManter": false,
+    "width": 108,
+    "height": 28
+  },
+  "fields": [
+    {
+      "id": "emp",
+      "description": "Empresa",
+      "variable": "CODEMP",
+      "type": "integer",
+      "tabId": "parent",
+      "required": true,
+      "inputSize": 4,
+      "lookupPreset": "empresa",
+      "hasDisplay": true,
+      "extraVariables": "EMP,SN,DADDET,CODLIN,CODREG,FLGFUN,TABALT,DISABLE",
+      "labelColumn": 6,
+      "labelLine": 1,
+      "labelSize": 9,
+      "inputColumn": 15,
+      "inputLine": 1,
+      "displayColumn": 21,
+      "displayLine": 1,
+      "displaySize": 30
+    },
+    {
+      "id": "sit",
+      "description": "Situação",
+      "variable": "SITROM",
+      "type": "radio",
+      "tabId": "parent",
+      "required": true,
+      "inputSize": 24,
+      "optionsVariable": "TABSITROM",
+      "createOptionsTable": true,
+      "optionsItems": [
+        {
+          "value": "A",
+          "description": "Aberto"
+        },
+        {
+          "value": "F",
+          "description": "Finalizado"
+        },
+        {
+          "value": "T",
+          "description": "Todos"
+        }
+      ],
+      "labelColumn": 57,
+      "labelLine": 1,
+      "labelSize": 8,
+      "inputColumn": 65,
+      "inputLine": 1
+    }
+  ],
+  "grid": {
+    "location": "parent",
+    "code": 41,
+    "line": 3,
+    "height": 20,
+    "startLine": 4,
+    "endLine": 23,
+    "consultButton": {
+      "enabled": true,
+      "column": 92,
+      "line": 1
+    },
+    "columns": [
+      {
+        "title": "Editar",
+        "type": "a",
+        "width": 8,
+        "variable": "EDITAR",
+        "displayOnly": true,
+        "displayExpression": "\"Editar\"",
+        "clickLabel": "3500"
+      },
+      {
+        "title": "Ações",
+        "type": "a",
+        "width": 8,
+        "variable": "ACOES",
+        "displayOnly": true,
+        "displayExpression": "\"Ações\"",
+        "clickLabel": "3600",
+        "actionMenu": [
+          {
+            "text": "Visualizar",
+            "label": "3610"
+          },
+          {
+            "text": "Finalizar Romaneio",
+            "label": "3620"
+          },
+          {
+            "text": "Excluir",
+            "label": "3630"
+          }
+        ]
+      },
+      {
+        "title": "Código",
+        "type": "n",
+        "width": 8,
+        "variable": "CODROM",
+        "recordKey": true
+      },
+      {
+        "title": "Cliente",
+        "type": "a",
+        "width": 40,
+        "variable": "NOMCLI",
+        "workPiece": 1
+      },
+      {
+        "title": "Checklist",
+        "type": "n",
+        "width": 8,
+        "variable": "CODCHK",
+        "workPiece": 2,
+        "detail": true
+      },
+      {
+        "title": "Descrição Checklist",
+        "type": "a",
+        "width": 35,
+        "variable": "DESCHK",
+        "workPiece": 3
+      },
+      {
+        "title": "Situação",
+        "type": "a",
+        "width": 10,
+        "variable": "SITUAC",
+        "workPiece": 4
+      },
+      {
+        "title": "Data Cadastro",
+        "type": "d",
+        "width": 10,
+        "variable": "DATCAD",
+        "workPiece": 5
+      },
+      {
+        "title": "Data Fim Romaneio",
+        "type": "d",
+        "width": 10,
+        "variable": "DATFIM",
+        "workPiece": 6
+      }
+    ]
+  },
+  "buttons": [
+    {
+      "id": "Novo",
+      "text": "No<u>v</u>o",
+      "buttonId": "btNovo",
+      "icon": "plus",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3540",
+      "positionMode": "manual",
+      "column": 6,
+      "line": 2,
+      "size": 10,
+      "initialState": 1,
+      "actionCode": "set FLGFUN=0\ndo Show^WDOMTESTEROM110A(\"3540EX^WDOMTESTEROM110\",\"(CODEMP,,FLGFUN,.TABALT)\")\nquit:$$CSP^%CSW1UTI()\n;\n3540EX\tif $data(TABALT) goto 2000\ngoto 3000"
+    }
+  ],
+  "ruleHooks": {
+    "workGlobalCode": "; Romaneios da empresa, filtrados pela situação (T = todos; F = finalizado pela Conclusão)\nnew codRomaneio,dados,situacaoRomaneio,codChecklist,dadosChecklist,ftcl,scCliente\nset codRomaneio=\"\"\nfor  set codRomaneio=$order(^WDOMTESTEROMC(2,empresa,1,codRomaneio)) quit:codRomaneio=\"\"!$$$ISERR(sc)  do\n. set dados=$get(^WDOMTESTEROMC(2,empresa,1,codRomaneio,1))\n. set situacaoRomaneio=$select($piece(dados,Z,16)'=\"\":\"F\",1:\"A\")\n. if situacao'=\"T\",situacaoRomaneio'=situacao quit\n. set codChecklist=$piece(dados,Z,4)\n. set (dadosChecklist,ftcl)=\"\"\n. if codChecklist'=\"\" set dadosChecklist=$get(^WDOMTESTEROMC(1,empresa,1,codChecklist,1))\n. if $piece(dadosChecklist,Z,5)'=\"\" set scCliente=$$ObterNomeCliente^CCFT760RG(empresa,$piece(dadosChecklist,Z,5),.ftcl)\n. set {mtemp}=$select($piece(dadosChecklist,Z,5)=\"\":\"\",1:$piece(dadosChecklist,Z,5)_\" - \"_$piece(ftcl,Z,2))_Z_codChecklist_Z_$extract($piece(dadosChecklist,Z,6),1,60)_Z_$select(situacaoRomaneio=\"F\":\"Finalizado\",1:\"Aberto\")_Z_$piece(dados,Z,3)_Z_$piece($piece(dados,Z,16),\",\",1)\n. set sc=$$GravarGlobalTrabalho(term,codRomaneio,{mtemp})",
+    "extraMethods": "; Finalizar Romaneio (ação do grid): grava data/hora e operador da finalização\n;\n; set sc=$$FinalizarRomaneio^WDOMTESTEROM110RG(codEmpresa,codRomaneio)\nFinalizarRomaneio(codEmpresa,codRomaneio)\t;\n$$$VAR\nnew dados\n;\nif $get(codRomaneio)=\"\" quit $$$ERROR(10000,\"Selecione um romaneio no grid!\")\nif '$data(^WDOMTESTEROMC(2,codEmpresa,1,codRomaneio,1)) quit $$$ERROR(10000,\"Romaneio \"_codRomaneio_\" não cadastrado!\")\n;\nset dados=$get(^WDOMTESTEROMC(2,codEmpresa,1,codRomaneio,1))\nif $piece(dados,Z,16)'=\"\" quit $$$ERROR(10000,\"Romaneio \"_codRomaneio_\" já está finalizado!\")\n;\nset $piece(dados,Z,16)=$$$horologEmp(codEmpresa)\nset $piece(dados,Z,17)=$$VEROP^%CSUTIUD(1)\ndo $$$SetG(^WDOMTESTEROMC(2,codEmpresa,1,codRomaneio,1),dados)\n;\nquit $$$OK\n;\n; Excluir Romaneio (e os vínculos com o checklist): regra do cadastro\n;\n; set sc=$$ExcluirRomaneio^WDOMTESTEROM110RG(codEmpresa,codRomaneio)\nExcluirRomaneio(codEmpresa,codRomaneio)\t;\n$$$VAR\n;\nquit $$ExcluirRomaneio^WDOMTESTEROM110ARG(codEmpresa,$get(codRomaneio))",
+    "interfaceCode": "; Editar: abre o cadastro do romaneio (item 4) para alterar\n;\n3500\tset sc=$$ObterDadosLinha^%CSW1GRID(CT,%PRG,41,,.DADDET,.CODLIN,.CODREG)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 3000\n;\nset FLGFUN=1\n;\ndo Show^WDOMTESTEROM110A(\"3500EX^WDOMTESTEROM110\",\"(CODEMP,$piece(DADDET,Z,3),FLGFUN,.TABALT)\")\nquit:$$CSP^%CSW1UTI()\n;\n3500EX\tif $data(TABALT) goto 2000\n;\ngoto 3000\n;\n; Visualizar: abre o cadastro do romaneio só para consulta\n;\n3610\tset sc=$$ObterDadosLinha^%CSW1GRID(CT,%PRG,41,,.DADDET,.CODLIN,.CODREG)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 3000\n;\nset DISABLE=1\ndo Show^WDOMTESTEROM110A(\"3610EX^WDOMTESTEROM110\",\"(CODEMP,$piece(DADDET,Z,3),,,DISABLE)\")\nquit:$$CSP^%CSW1UTI()\n;\n3610EX\tgoto 3000\n;\n; Finalizar Romaneio\n;\n3620\tset sc=$$ObterDadosLinha^%CSW1GRID(CT,%PRG,41,,.DADDET,.CODLIN,.CODREG)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 3000\n;\nset sc=$$FinalizarRomaneio^WDOMTESTEROM110RG(CODEMP,$piece(DADDET,Z,3))\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 3000\n;\ndo MECABECALHO^%CSW1UTI(\"Romaneio finalizado!\")\n;\ngoto 2000\n;\n; Excluir\n;\n3630\tset sc=$$ObterDadosLinha^%CSW1GRID(CT,%PRG,41,,.DADDET,.CODLIN,.CODREG)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 3000\n;\ndo SN^%CSUTIUD(,,,2,,\"3630SN1^WDOMTESTEROM110\")\nquit:$$CSP^%CSW1UTI()\n;\n3630SN1\tif SN'=\"S\" goto 3630EX\n;\nset sc=$$ExcluirRomaneio^WDOMTESTEROM110RG(CODEMP,$piece(DADDET,Z,3))\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 3630EX\n;\nset sc=$$ExcluirLinha^%CSW1GRID2(CT,%PRG,41,,,,CODREG)\n;\ndo MECABECALHO^%CSW1UTI(2)\n;\n3630EX\tgoto 3000"
+  }
+}

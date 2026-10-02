@@ -37,10 +37,24 @@
     if (!input || typeof input !== "object") return [];
 
     if (Array.isArray(input)) {
-      return input.filter((item) => item && Array.isArray(item.components));
+      const telas = input.filter((item) => item && Array.isArray(item.components));
+      if (telas.length) return telas;
+
+      return input.flatMap((item) => screensFrom(item));
     }
 
-    const list = first(input.screens, input.telas, input.pages, input.views, input.rotinas);
+    if (input.project && typeof input.project === "object" && !input.components) {
+      return screensFrom(input.project);
+    }
+
+    const list = first(
+      input.screens,
+      input.telas,
+      input.pages,
+      input.views,
+      input.rotinas,
+      input.routines
+    );
     if (Array.isArray(list)) {
       return list.filter((item) => item && Array.isArray(item.components));
     }
@@ -1228,7 +1242,7 @@
       .filter(
         (button) =>
           !consult.includes(button) &&
-          !inlineButtons.includes(button) &&
+          !(hasInlineMaintenance && inlineButtons.includes(button)) &&
           button !== cancelButton
       )
       .map((button, index) => ({
@@ -1310,9 +1324,8 @@
         column: entry.column,
         size: entry.size,
         buttonId: uniqueButtonId(entry.text, entry.index),
-        // Um label por botão; sem isso todos caem no mesmo 6000.
-        actionLabel: String(6000 + entry.index * 100),
-        returnLabel: String(6000 + entry.index * 100) + "EX"
+        actionLabel: String(3500 + entry.index * 100),
+        returnLabel: String(3500 + entry.index * 100) + "EX"
       })),
       indexes: fields
         .filter((field) => field.isKey)
@@ -1338,44 +1351,45 @@
 
   const EXAMPLE = JSON.stringify(
     {
-      id: "WDWDNEW010",
-      name: "Planejamento e Programação da Produção",
-      index: 9,
+      id: "WDCCMOT010",
+      name: "Cadastro de Motivo",
+      index: 0,
       components: [
-        { id: "Label", text: "Período de", x: 80, y: 14, width: 74, height: 20 },
-        { id: "Csle", x: 155, y: 14, width: 224, height: 24 },
-        { id: "Label", text: "Até", x: 410, y: 14, width: 30, height: 20 },
-        { id: "Csle", x: 441, y: 14, width: 224, height: 24 },
-        { id: "Label", text: "Finalidade", x: 86, y: 42, width: 68, height: 20 },
-        { id: "Csle", x: 155, y: 42, width: 224, height: 24 },
-        { id: "Display", x: 390, y: 42, width: 430, height: 24 },
-        { id: "Label", text: "Tipo de Nota", x: 1004, y: 42, width: 86, height: 20 },
-        { id: "Csle", x: 1092, y: 42, width: 162, height: 24 },
-        { id: "Display", x: 1268, y: 42, width: 232, height: 24 },
-        { id: "Label", text: "Produto", x: 122, y: 70, width: 54, height: 20 },
-        { id: "Csle", x: 155, y: 70, width: 224, height: 24 },
-        { id: "Display", x: 390, y: 70, width: 430, height: 24 },
+        { id: "Label", text: "Empresa", x: 60, y: 20, width: "100px", height: "24px", index: 0 },
+        { id: "Csle", text: "1", x: 170, y: 20, width: "60px", height: "24px", f7: "F7", f8: "", index: 1 },
+        { id: "Display", text: "1 - Empresa Natreb", x: 240, y: 20, width: "300px", height: "24px", index: 2 },
+
+        { id: "Label", text: "Cód. Motivo", x: 60, y: 48, width: "100px", height: "24px", index: 3 },
+        { id: "Csle", text: "142", x: 170, y: 48, width: "60px", height: "24px", f7: "F7", f8: "", index: 4 },
+        { id: "Display", text: "142 - Troca de bobina", x: 240, y: 48, width: "300px", height: "24px", index: 5 },
+
+        { id: "Label", text: "Descrição", x: 60, y: 76, width: "100px", height: "24px", index: 6 },
+        { id: "Csle", text: "Troca de bobina", x: 170, y: 76, width: "300px", height: "24px", f7: "", f8: "", index: 7 },
+
         {
           id: "Grid",
-          x: 0,
+          x: 60,
           y: 120,
-          width: "1498px",
-          height: "436px",
-          displayIcon: "fa-table-cells",
-          columns: [
-            { title: "Check", width: 100, type: "check" },
-            { title: "Previsão de Entrega", width: 310 },
-            { title: "Pedido", width: 130 },
-            { title: "Controle", width: 160 },
-            { title: "OP", width: 70 },
-            { title: "Engenharia", width: 210 },
-            { title: "Engenharia OF", width: 250 },
-            { title: "Quantidade", width: 150 }
-          ]
+          width: "800px",
+          height: "200px",
+          index: 8,
+          gridData: {
+            columns: [
+              { title: "Setor", field: "codSetor", dataType: "n" },
+              { title: "Descrição", field: "descSetor", dataType: "a" },
+              { title: "Tempo Meta", field: "tempoMeta", dataType: "n" },
+              { title: "Vigência", field: "vigencia", dataType: "d" }
+            ],
+            data: [
+              { codSetor: "15", descSetor: "Comercial", tempoMeta: "10,00", vigencia: "01/01/2026" },
+              { codSetor: "7", descSetor: "Engenharia", tempoMeta: "15,00", vigencia: "01/03/2026" }
+            ]
+          }
         },
-        { id: "Button", text: "Manutenção", x: 16, y: 620, width: 224, height: 26 },
-        { id: "Button", text: "Gerar Planejamento", x: 256, y: 620, width: 224, height: 26 },
-        { id: "Button", text: "Inclusão Engenharia", x: 496, y: 620, width: 224, height: 26 }
+
+        { id: "Button", text: "Incluir", x: 60, y: 350, width: "160px", height: "24px", icon: "fa-save", index: 9 },
+        { id: "Button", text: "Manutenção", x: 240, y: 350, width: "160px", height: "24px", index: 10 },
+        { id: "Button", text: "Excluir", x: 420, y: 350, width: "160px", height: "24px", icon: "fa-trash", index: 11 }
       ]
     },
     null,
@@ -1416,6 +1430,66 @@
       font-size: 12.5px; cursor: pointer; }
     .gpj-des-foot button.primary { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 600; }
     .gpj-des-status { font-size: 12.5px; opacity: .78; }
+    .gpj-des-api { gap: 6px; }
+    .gpj-des-api label.grow { flex: 1 1 auto; min-width: 0; }
+    .gpj-des-api label.grow input, .gpj-des-api label.grow select { width: 100%; min-width: 0; }
+    .gpj-des-api input[type="password"] { width: 92px; }
+    .gpj-des-api input[data-des-projectid] { width: 150px; }
+
+    /* Miniatura: o desenho como ele aparece no builder, reduzido. As classes
+       imitam o visual dos componentes React para a tela ser reconhecível.
+
+       Atenção: transform scale desenha menor mas NÃO encolhe a caixa de
+       layout — um desenho de 1200px continuaria reservando 1200px e
+       arrebentaria a grade do modal. Por isso o canvas vive dentro de uma
+       moldura de tamanho já reduzido, com overflow hidden. */
+    .gpj-des-body > div { min-width: 0; }
+    .gpj-des-mini { border: 1px solid #e5e9f0; border-radius: 10px; background: #eceef1;
+      margin-bottom: 8px; padding: 6px; height: 200px; overflow: auto;
+      display: flex; align-items: flex-start; justify-content: center; }
+    .gpj-des-mini.hidden { display: none; }
+    .gpj-des-mini-frame { position: relative; overflow: hidden; flex: 0 0 auto; }
+    .gpj-des-mini-canvas { position: absolute; top: 0; left: 0;
+      transform-origin: top left; background: #eceef1; }
+    .gpj-des-mini-canvas > div { position: absolute; box-sizing: border-box; font-size: 12px;
+      overflow: hidden; white-space: nowrap; }
+    .gpj-des-mini-label { display: flex; align-items: center; justify-content: flex-end;
+      color: #111827; padding-right: 4px; }
+    .gpj-des-mini-display { background: #d1d5db; border: 1px solid #9ca3af; border-radius: 5px;
+      display: flex; align-items: center; padding-left: 4px; color: #111827; }
+    .gpj-des-mini-input { background: #fff; border: 1px solid #9ca3af; border-left: 3px solid #ea580c;
+      border-radius: 5px; display: flex; align-items: center; justify-content: space-between;
+      padding-left: 4px; color: #111827; }
+    .gpj-des-mini-input i { background: #e5e7eb; height: 100%; width: 18px; text-align: center;
+      font-style: normal; color: #6b7280; display: flex; align-items: center; justify-content: center; }
+    .gpj-des-mini-button { background: #1f2937; color: #fff; border-radius: 5px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .gpj-des-mini-radio { display: flex; align-items: center; gap: 8px; color: #111827; }
+    .gpj-des-mini-radio span::before { content: "◉ "; }
+    .gpj-des-mini-text { background: #fff; border: 1px solid #9ca3af; border-left: 3px solid #ea580c;
+      border-radius: 5px; padding: 2px 4px; color: #111827; white-space: normal; }
+    .gpj-des-mini-tabs { background: #fff; border: 1px solid #9ca3af; border-radius: 5px; }
+    .gpj-des-mini-tabs b { display: inline-block; font-weight: 600; font-size: 11px;
+      padding: 3px 10px; border-right: 1px solid #d1d5db; background: #f3f4f6; }
+    .gpj-des-mini-tabs b.on { background: #fff; border-bottom: 2px solid #1f2937; }
+    .gpj-des-mini-grid { background: #fff; border: 1px solid #9ca3af; }
+    .gpj-des-mini-grid table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .gpj-des-mini-grid th { border-bottom: 2px solid #d1d5db; border-left: 1px solid #e5e7eb;
+      padding: 1px 4px; font-weight: 600; text-align: left; color: #374151; }
+    .gpj-des-mini-grid td { border-bottom: 1px solid #f3f4f6; border-left: 1px solid #f3f4f6;
+      padding: 1px 4px; color: #4b5563; }
+
+    /* Botões que abrem outra rotina */
+    .gpj-des-links { margin-top: 8px; border: 1px solid #e5e9f0; border-radius: 10px; padding: 8px 10px; }
+    .gpj-des-links.hidden { display: none; }
+    .gpj-des-links h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase;
+      letter-spacing: .4px; opacity: .6; }
+    .gpj-des-links .row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12.5px; }
+    .gpj-des-links .row b { flex: 0 0 150px; font-weight: 600; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    .gpj-des-links .row select { flex: 1 1 auto; min-width: 0; padding: 4px 6px;
+      border: 1px solid #d5dbe6; border-radius: 6px; font-size: 12.5px; }
+    .gpj-des-links .row em { flex: 0 0 auto; font-style: normal; font-size: 11.5px; opacity: .6; }
   `;
 
   let backdrop = null;
@@ -1424,6 +1498,100 @@
   let statusLabel = null;
   let screenSelect = null;
   let lastResult = null;
+  let miniatureBox = null;
+  let linksBox = null;
+  let miniatureOn = true;
+
+  /* ------------------------------------------------------------------ *
+   * Busca direta no builder
+   *
+   * O desenhador publicado guarda cada projeto no back NestJS, e o que ele
+   * grava em `routines` é exatamente o JSON que se colava aqui à mão. Puxar
+   * pela API evita o copia-e-cola e traz o projeto inteiro de uma vez — o
+   * que importa para as abas, que apontam para outras telas pelo id.
+   * ------------------------------------------------------------------ */
+
+  const BUILDER_PADRAO = "https://builder.widelab.com.br/api";
+  const BUILDER_CHAVE = "gpj-desenhador-builder";
+
+  function builderPrefs() {
+    try {
+      return JSON.parse(localStorage.getItem(BUILDER_CHAVE) || "{}") || {};
+    } catch (erro) {
+      return {};
+    }
+  }
+
+  function salvarBuilderPrefs(valores) {
+    try {
+      localStorage.setItem(
+        BUILDER_CHAVE,
+        JSON.stringify({ ...builderPrefs(), ...valores })
+      );
+    } catch (erro) {
+      /* modo anônimo ou storage cheio: a busca continua funcionando */
+    }
+  }
+
+  function idDoProjeto(valor) {
+    const texto = String(valor || "").trim();
+    const achado = /[0-9a-f]{24}/i.exec(texto);
+    return achado ? achado[0] : texto;
+  }
+
+  function baseDaApi(valor) {
+    const texto = String(valor || "").trim().replace(/\/+$/, "");
+    if (!texto) return BUILDER_PADRAO;
+    return /\/api$/.test(texto) ? texto : `${texto}/api`;
+  }
+
+  async function builderGet(base, caminho, token) {
+    const cabecalhos = { Accept: "application/json" };
+    if (token) cabecalhos.Authorization = `Bearer ${token}`;
+
+    const resposta = await fetch(`${baseDaApi(base)}${caminho}`, {
+      method: "GET",
+      headers: cabecalhos
+    });
+
+    if (resposta.status === 401 || resposta.status === 403) {
+      throw new Error(
+        "O builder recusou a credencial (HTTP " +
+          resposta.status +
+          "). Cole um token válido — ele está no localStorage do desenhador, chave \"token\"."
+      );
+    }
+
+    if (!resposta.ok) {
+      throw new Error(`O builder respondeu HTTP ${resposta.status}.`);
+    }
+
+    return resposta.json();
+  }
+
+  async function listarProjetos(base, token) {
+    const dados = await builderGet(base, "/project", token);
+    const lista = Array.isArray(dados) ? dados : [dados];
+
+    return lista
+      .filter((item) => item && item._id)
+      .map((item) => ({
+        id: item._id,
+        nome: String(item.name || item._id),
+        rotinas: (item.routines || []).length
+      }));
+  }
+
+  async function buscarProjeto(base, id, token) {
+    const dados = await builderGet(base, `/project/${idDoProjeto(id)}`, token);
+    const projeto = Array.isArray(dados) ? dados[0] : dados;
+
+    if (!projeto || !Array.isArray(projeto.routines) || !projeto.routines.length) {
+      throw new Error("O builder devolveu um projeto sem rotinas.");
+    }
+
+    return projeto;
+  }
 
   function injectStyle() {
     if (document.getElementById("gpj-des-style")) return;
@@ -1499,6 +1667,242 @@
     }
   }
 
+  /* ------------------------------------------------------------------ *
+   * Miniatura da tela
+   *
+   * Redesenha os componentes na mesma posição em que estão no builder, só
+   * que reduzidos. Serve para conferir de olho que a tela escolhida na combo
+   * é mesmo a que se quer — o quadro de campos ao lado diz o que virou o quê,
+   * mas não parece uma tela.
+   * ------------------------------------------------------------------ */
+
+  const escapar = (valor) => app.utils.escapeHtml(String(valor ?? ""));
+
+  const ALTURA_MINIATURA = 200;
+
+  function caixaMiniatura(item, deslocaX = 0, deslocaY = 0) {
+    const geometria =
+      `left:${item.x - deslocaX}px;top:${item.y - deslocaY}px;` +
+      `width:${item.width}px;height:${item.height}px`;
+
+    const simples = (classe, conteudo) =>
+      `<div class="${classe}" style="${geometria}">${conteudo}</div>`;
+
+    switch (item.kind) {
+      case "label":
+        return simples("gpj-des-mini-label", escapar(item.text));
+
+      case "display":
+        return simples("gpj-des-mini-display", escapar(item.text));
+
+      case "button":
+        return simples("gpj-des-mini-button", escapar(item.text));
+
+      case "textarea":
+        return simples("gpj-des-mini-text", escapar(item.text));
+
+      case "radio":
+      case "checkbox": {
+        const opcoes = Array.isArray(item.options) ? item.options : [];
+        const textos = opcoes.length
+          ? opcoes.map((opcao) => escapar(opcao?.label ?? opcao))
+          : String(item.text || "")
+              .split("/")
+              .map((parte) => escapar(parte.trim()))
+              .filter(Boolean);
+        return simples(
+          "gpj-des-mini-radio",
+          textos.map((texto) => `<span>${texto}</span>`).join("")
+        );
+      }
+
+      case "tabstrip":
+      case "tab": {
+        const abas = Array.isArray(item.tabs) ? item.tabs : [];
+        return simples(
+          "gpj-des-mini-tabs",
+          abas
+            .map(
+              (aba, i) =>
+                `<b class="${i === 0 ? "on" : ""}">${escapar(aba?.name || aba?.title || `Aba ${i + 1}`)}</b>`
+            )
+            .join("")
+        );
+      }
+
+      case "grid": {
+        const colunas = Array.isArray(item.columns) ? item.columns : [];
+        const linhas = (Array.isArray(item.rows) ? item.rows : []).slice(0, 6);
+
+        const cabecalho = colunas
+          .map((coluna) => `<th>${escapar(coluna?.title ?? coluna?.name ?? coluna)}</th>`)
+          .join("");
+
+        const corpo = linhas
+          .map(
+            (linha) =>
+              `<tr>${colunas
+                .map((coluna) => `<td>${escapar(linha?.[coluna?.field] ?? "")}</td>`)
+                .join("")}</tr>`
+          )
+          .join("");
+
+        return simples(
+          "gpj-des-mini-grid",
+          `<table><thead><tr>${cabecalho}</tr></thead><tbody>${corpo}</tbody></table>`
+        );
+      }
+
+      default: {
+        const lupa = item.hasLookup ? "<i>&#8981;</i>" : item.kind === "combo" ? "<i>v</i>" : "";
+        return simples("gpj-des-mini-input", `<span>${escapar(item.text)}</span>${lupa}`);
+      }
+    }
+  }
+
+  function renderMiniature(screen) {
+    if (!miniatureBox) return;
+
+    if (!miniatureOn || !screen) {
+      miniatureBox.classList.add("hidden");
+      return;
+    }
+
+    const itens = (screen.components || []).map(normalizeComponent);
+    if (!itens.length) {
+      miniatureBox.classList.add("hidden");
+      return;
+    }
+
+    const esquerda = Math.min(...itens.map((item) => item.x));
+    const topo = Math.min(...itens.map((item) => item.y));
+
+    const largura = Math.max(1, ...itens.map((item) => item.right)) - esquerda + 8;
+    const altura = Math.max(1, ...itens.map((item) => item.bottom)) - topo + 8;
+
+    const disponivel = Math.max(240, (miniatureBox.clientWidth || 520) - 16);
+
+    const escala = Math.min(1, disponivel / largura);
+
+    const larguraFinal = Math.ceil(largura * escala);
+    const alturaFinal = Math.ceil(altura * escala);
+
+    miniatureBox.classList.remove("hidden");
+    miniatureBox.style.removeProperty("height");
+    miniatureBox.innerHTML =
+      `<div class="gpj-des-mini-frame" style="width:${larguraFinal}px;height:${alturaFinal}px">` +
+      `<div class="gpj-des-mini-canvas" style="width:${largura}px;height:${altura}px;` +
+      `transform:scale(${escala.toFixed(4)})">` +
+      itens.map((item) => caixaMiniatura(item, esquerda - 4, topo - 4)).join("") +
+      "</div></div>";
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Botão que abre outra rotina
+   *
+   * No desenho o "Novo" do WDNRWORK002 abre o WDNRWORK002A. O gerador já
+   * sabe fazer isso (botão com "Ao clicar: abrir outra tela"), mas o
+   * importador não tinha como saber o destino — agora escolhe-se aqui,
+   * entre as telas do próprio projeto carregado.
+   * ------------------------------------------------------------------ */
+
+  const NOVO_PATTERN = /^(novo|incluir|inserir|adicionar|editar|manuten[çc][ãa]o|detalhar|abrir)\b/i;
+
+  const destinos = new Map();
+
+  const chaveDestino = (telaId, buttonId) => `${telaId}|${buttonId}`;
+
+  function destinoSugerido(telaId, texto, telas) {
+    if (!NOVO_PATTERN.test(String(texto || "").replace(/^\+\s*/, "").trim())) return "";
+
+    const candidatas = telas.filter(
+      (tela) => tela.id !== telaId && String(tela.id).startsWith(String(telaId))
+    );
+
+    if (!candidatas.length) return "";
+
+    const menor = Math.min(...candidatas.map((tela) => String(tela.id).length));
+    const curtas = candidatas.filter((tela) => String(tela.id).length === menor);
+
+    return curtas.length === 1 ? curtas[0].id : "";
+  }
+
+  function semearDestinos(result, telaId, telas) {
+    if (telas.length < 2) return;
+
+    (result.buttons || []).forEach((button) => {
+      const chave = chaveDestino(telaId, button.buttonId);
+      if (destinos.has(chave)) return;
+
+      const sugerido = destinoSugerido(telaId, button.text, telas);
+      if (sugerido) destinos.set(chave, sugerido);
+    });
+  }
+
+  function aplicarDestinos(result, telaId) {
+    (result.buttons || []).forEach((button) => {
+      const alvo = destinos.get(chaveDestino(telaId, button.buttonId));
+      if (!alvo) return;
+
+      button.actionType = "screen";
+      button.generateRoutine = false;
+      button.openRoutine = alvo;
+    });
+  }
+
+  function renderLinks(result, telaId, telas) {
+    if (!linksBox) return;
+
+    const botoes = result.buttons || [];
+    if (!botoes.length || telas.length < 2) {
+      linksBox.classList.add("hidden");
+      linksBox.innerHTML = "";
+      return;
+    }
+
+    linksBox.classList.remove("hidden");
+    linksBox.innerHTML =
+      "<h3>Ao clicar, abrir</h3>" +
+      botoes
+        .map((button) => {
+          const chave = chaveDestino(telaId, button.buttonId);
+          const escolhido = destinos.get(chave) || "";
+
+          const opcoes = [`<option value="">— label na própria rotina —</option>`]
+            .concat(
+              telas
+                .filter((tela) => tela.id !== telaId)
+                .map(
+                  (tela) =>
+                    `<option value="${escapar(tela.id)}" ${
+                      escolhido === tela.id ? "selected" : ""
+                    }>${escapar(tela.id)} — ${escapar(tela.name)}</option>`
+                )
+            )
+            .join("");
+
+          const nota = escolhido
+            ? `do Show^${escapar(escolhido)}`
+            : `label ${escapar(button.actionLabel)}`;
+
+          return (
+            `<div class="row"><b title="${escapar(button.text)}">${escapar(button.text)}</b>` +
+            `<select data-des-target="${escapar(chave)}">${opcoes}</select>` +
+            `<em>${nota}</em></div>`
+          );
+        })
+        .join("");
+
+    linksBox.querySelectorAll("[data-des-target]").forEach((select) =>
+      select.addEventListener("change", () => {
+        const chave = select.getAttribute("data-des-target");
+        if (select.value) destinos.set(chave, select.value);
+        else destinos.delete(chave);
+        renderPreview();
+      })
+    );
+  }
+
   function renderPreview() {
     let parsed = null;
 
@@ -1508,11 +1912,25 @@
       previewBox.innerHTML = `<div style="padding:22px;text-align:center;opacity:.7;font-size:13px">JSON inválido: ${app.utils.escapeHtml(error.message)}<br><br>Cole o arquivo inteiro ou as telas separadas por vírgula — os colchetes de fora não fazem falta.</div>`;
       statusLabel.textContent = "Cole o JSON do desenhador.";
       lastResult = null;
+      miniatureBox?.classList.add("hidden");
+      linksBox?.classList.add("hidden");
       return;
     }
 
     const result = convert(parsed, currentOptions());
     lastResult = result;
+
+    const desenhos = screensFrom(parsed);
+    const escolhida = Math.min(
+      Math.max(0, Number(currentOptions().screen) || 0),
+      Math.max(0, desenhos.length - 1)
+    );
+    const telaId = result.routine.name || String(escolhida);
+
+    renderMiniature(desenhos[escolhida]);
+    semearDestinos(result, telaId, result.screens);
+    aplicarDestinos(result, telaId);
+    renderLinks(result, telaId, result.screens);
 
     if (screenSelect && result.screens.length) {
       const current = screenSelect.value;
@@ -1613,10 +2031,20 @@
 
           <div class="gpj-des-body">
             <div>
+              <div class="gpj-des-toolbar gpj-des-api">
+                <label class="grow">Builder <input type="text" data-des-api placeholder="${BUILDER_PADRAO}"></label>
+                <label>Token <input type="password" data-des-token placeholder="opcional" autocomplete="off"></label>
+                <button type="button" data-des-list>Listar projetos</button>
+              </div>
+              <div class="gpj-des-toolbar gpj-des-api">
+                <label class="grow">Projeto <select data-des-project><option value="">— cole o id ou clique em Listar —</option></select></label>
+                <input type="text" data-des-projectid placeholder="id ou URL do projeto">
+                <button type="button" data-des-fetch>Buscar</button>
+              </div>
               <div class="gpj-des-toolbar">
                 <label>Tela <select data-des-screen></select></label>
               </div>
-              <textarea spellcheck="false" placeholder="Cole aqui o JSON do desenhador…"></textarea>
+              <textarea spellcheck="false" placeholder="Cole aqui o JSON do desenhador — ou puxe direto do builder acima."></textarea>
             </div>
 
             <div>
@@ -1624,8 +2052,11 @@
                 <label>Colunas <input type="number" min="40" max="240" data-des-columns value="108"></label>
                 <label>Largura da célula <input type="number" min="2" step="0.1" data-des-cellwidth placeholder="auto"></label>
                 <label>Altura da linha <input type="number" min="4" data-des-cellheight placeholder="auto"></label>
+                <label><input type="checkbox" data-des-mini-toggle checked> Miniatura</label>
               </div>
+              <div class="gpj-des-mini hidden" data-des-mini></div>
               <div class="gpj-des-preview"></div>
+              <div class="gpj-des-links hidden" data-des-links></div>
             </div>
           </div>
 
@@ -1644,9 +2075,18 @@
       previewBox = backdrop.querySelector(".gpj-des-preview");
       statusLabel = backdrop.querySelector(".gpj-des-status");
       screenSelect = backdrop.querySelector("[data-des-screen]");
+      miniatureBox = backdrop.querySelector("[data-des-mini]");
+      linksBox = backdrop.querySelector("[data-des-links]");
 
       textarea.addEventListener("input", renderPreview);
       screenSelect.addEventListener("change", renderPreview);
+
+      const chaveMini = backdrop.querySelector("[data-des-mini-toggle]");
+      chaveMini.addEventListener("change", () => {
+        miniatureOn = chaveMini.checked;
+        salvarBuilderPrefs({ miniatura: miniatureOn });
+        renderPreview();
+      });
 
       ["[data-des-columns]", "[data-des-cellwidth]", "[data-des-cellheight]"].forEach((selector) =>
         backdrop.querySelector(selector).addEventListener("input", renderPreview)
@@ -1663,6 +2103,102 @@
         textarea.value = EXAMPLE;
         renderPreview();
       });
+
+      /* ---- builder ------------------------------------------------- */
+
+      const campoApi = backdrop.querySelector("[data-des-api]");
+      const campoToken = backdrop.querySelector("[data-des-token]");
+      const campoId = backdrop.querySelector("[data-des-projectid]");
+      const comboProjeto = backdrop.querySelector("[data-des-project]");
+      const botaoListar = backdrop.querySelector("[data-des-list]");
+      const botaoBuscar = backdrop.querySelector("[data-des-fetch]");
+
+      const prefs = builderPrefs();
+      campoApi.value = prefs.api || "";
+      campoToken.value = prefs.token || "";
+      campoId.value = prefs.projeto || "";
+
+      miniatureOn = prefs.miniatura !== false;
+      chaveMini.checked = miniatureOn;
+
+      const guardar = () =>
+        salvarBuilderPrefs({
+          api: campoApi.value.trim(),
+          token: campoToken.value.trim(),
+          projeto: campoId.value.trim()
+        });
+
+      [campoApi, campoToken, campoId].forEach((campo) =>
+        campo.addEventListener("change", guardar)
+      );
+
+      async function comEspera(botao, rotulo, tarefa) {
+        const original = botao.textContent;
+        botaoListar.disabled = true;
+        botaoBuscar.disabled = true;
+        botao.textContent = rotulo;
+
+        try {
+          await tarefa();
+        } catch (erro) {
+          statusLabel.innerHTML = `<span style="color:#b91c1c">${app.utils.escapeHtml(
+            erro.message || String(erro)
+          )}</span>`;
+        } finally {
+          botao.textContent = original;
+          botaoListar.disabled = false;
+          botaoBuscar.disabled = false;
+        }
+      }
+
+      botaoListar.addEventListener("click", () =>
+        comEspera(botaoListar, "Listando…", async () => {
+          guardar();
+          const projetos = await listarProjetos(campoApi.value, campoToken.value.trim());
+
+          comboProjeto.innerHTML =
+            `<option value="">— ${projetos.length} projeto(s) —</option>` +
+            projetos
+              .map(
+                (projeto) =>
+                  `<option value="${app.utils.escapeHtml(projeto.id)}">${app.utils.escapeHtml(
+                    projeto.nome
+                  )} (${projeto.rotinas})</option>`
+              )
+              .join("");
+
+          if (prefs.projeto) comboProjeto.value = idDoProjeto(prefs.projeto);
+          statusLabel.textContent = `${projetos.length} projeto(s) no builder. Escolha um e clique em Buscar.`;
+        })
+      );
+
+      comboProjeto.addEventListener("change", () => {
+        if (!comboProjeto.value) return;
+        campoId.value = comboProjeto.value;
+        guardar();
+        botaoBuscar.click();
+      });
+
+      botaoBuscar.addEventListener("click", () =>
+        comEspera(botaoBuscar, "Buscando…", async () => {
+          const alvo = campoId.value.trim() || comboProjeto.value;
+          if (!alvo) {
+            statusLabel.textContent = "Informe o id do projeto ou clique em Listar projetos.";
+            return;
+          }
+
+          guardar();
+          const projeto = await buscarProjeto(campoApi.value, alvo, campoToken.value.trim());
+
+          textarea.value = JSON.stringify(projeto.routines, null, 1);
+          renderPreview();
+
+          const nome = app.utils.escapeHtml(String(projeto.name || alvo));
+          statusLabel.innerHTML =
+            `<code>${nome}</code> — ${projeto.routines.length} tela(s) carregada(s). ` +
+            statusLabel.innerHTML;
+        })
+      );
 
       backdrop.querySelector("[data-des-json]").addEventListener("click", () => {
         if (!lastResult) return;
@@ -1714,7 +2250,8 @@
   }
 
   app.designerImport = {
-    parseDesignerJson, convert, open, close, install, EXAMPLE };
+    parseDesignerJson, convert, open, close, install, EXAMPLE,
+    listarProjetos, buscarProjeto, idDoProjeto, baseDaApi };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", install, { once: true });

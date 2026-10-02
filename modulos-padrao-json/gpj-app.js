@@ -380,6 +380,60 @@
     return Math.max(20, largestContentLine);
   }
 
+  function btnManterWidth() {
+    const config = app.getConfig();
+    return 48 + (String(config.generateSaveAnother) === "1" ? 16 : 0);
+  }
+
+  function applyBtnManterAlignment() {
+    if (!el.btnManterAlignment) return;
+
+    const alinhamento = el.btnManterAlignment.value;
+    if (alinhamento === "manual") return;
+
+    if (alinhamento === "left") {
+      el.btnManterColumn.value = 1;
+      return;
+    }
+
+    if (alinhamento === "fields") {
+      const local = el.btnManterLocation.value || "parent";
+      const campos = state.fields.filter(
+        (field) => (field.tabId || "parent") === local
+      );
+
+      const coluna = campos.length
+        ? Math.min(...campos.map((field) => Number(field.inputColumn) || 1))
+        : 1;
+
+      el.btnManterColumn.value = Math.max(1, coluna);
+      return;
+    }
+
+    const largura = Number(el.windowWidth.value) || 108;
+    el.btnManterColumn.value = Math.max(
+      1,
+      Math.floor((largura - btnManterWidth()) / 2) + 1
+    );
+  }
+
+  function hasTabs() {
+    return el.useTabs.checked && state.tabs.length > 0;
+  }
+
+  function parentGridLastLine() {
+    if (el.routineMode.value !== "grid") return 0;
+
+    if (!state.parentGrid || !state.parentGrid.settings) return 0;
+
+    const settings = state.parentGrid.settings;
+    const inicio = Number(settings.gridLinePosition) || 0;
+    const altura = Number(settings.gridHeight) || 0;
+    const fim = Number(settings.gridLineEnd) || 0;
+
+    return Math.max(fim, inicio ? inicio + altura - 1 : 0);
+  }
+
   function applyLayoutSuggestions() {
     state.layoutSuggestions = state.layoutSuggestions || {
       tabPanelLineAuto: true,
@@ -397,25 +451,33 @@
       app.grid.applyPositionSuggestions();
     }
 
-    if (el.useTabs.checked && state.layoutSuggestions.tabPanelHeightAuto !== false) {
+    if (hasTabs() && state.layoutSuggestions.tabPanelHeightAuto !== false) {
       el.tabPanelHeight.value = suggestedTabPanelHeight();
     }
 
     if (
-      el.useTabs.checked &&
       el.useBtnManter.checked &&
       el.btnManterLocation.value === "parent" &&
       state.layoutSuggestions.btnManterLineAuto !== false
     ) {
-      const panelLine = Number(el.tabPanelLine.value) || 2;
-      const panelHeight = Number(el.tabPanelHeight.value) || 20;
-      const panelLastLine = panelLine + panelHeight - 1;
+      if (hasTabs()) {
+        const panelLine = Number(el.tabPanelLine.value) || 2;
+        const panelHeight = Number(el.tabPanelHeight.value) || 20;
 
-      // Os botões principais ficam duas linhas após o final do TabPanel.
-      el.btnManterLine.value = panelLastLine + 2;
+        el.btnManterLine.value = panelLine + panelHeight - 1 + 2;
+      } else {
+        el.btnManterLine.value = Math.max(lastFieldLine("parent"), parentGridLastLine()) + 2;
+      }
     }
 
-    if (el.useTabs.checked && state.layoutSuggestions.windowHeightAuto !== false) {
+    applyBtnManterAlignment();
+
+    if (el.btnManterLineAuto) {
+      el.btnManterLineAuto.checked =
+        state.layoutSuggestions.btnManterLineAuto !== false;
+    }
+
+    if (hasTabs() && state.layoutSuggestions.windowHeightAuto !== false) {
       const panelLine = Number(el.tabPanelLine.value) || 2;
       const panelHeight = Number(el.tabPanelHeight.value) || 20;
       const panelLastLine = panelLine + panelHeight - 1;
@@ -428,8 +490,36 @@
         maintenanceLine + 2
       );
 
-      el.windowHeight.value = Math.max(28, requiredWindowHeight);
+      el.windowHeight.value = Math.min(28, Math.max(28, requiredWindowHeight));
     }
+  }
+
+  function renderOwnF7Fields() {
+    const select = el.ownF7DescriptionField;
+    if (!select) return;
+
+    const config = app.getConfig();
+    const pieces = app.fields.pieceAssignments(config);
+
+    const escolhido = select.dataset.pendente || select.value;
+    delete select.dataset.pendente;
+
+    const opcoes = state.fields
+      .filter((field) => pieces.has(field.id))
+      .map(
+        (field) =>
+          `<option value="${field.id}">${u.escapeHtml(field.description || field.variable)}</option>`
+      );
+
+    select.innerHTML = opcoes.length
+      ? `<option value="">— escolha o campo —</option>${opcoes.join("")}`
+      : '<option value="">— nenhum campo com piece —</option>';
+
+    if (escolhido && state.fields.some((field) => field.id === escolhido)) {
+      select.value = escolhido;
+    }
+
+    select.disabled = !el.generateOwnF7 || !el.generateOwnF7.checked;
   }
 
   app.refresh = function () {
@@ -438,6 +528,8 @@
     if (app.f7 && typeof app.f7.syncFields === "function") {
       app.f7.syncFields();
     }
+
+    renderOwnF7Fields();
 
     applyLayoutSuggestions();
 
@@ -500,97 +592,66 @@
       windowHeightAuto: true
     };
 
-    el.routineName.value = "WDOMTESTEU";
-    el.routineTitle.value = "Cadastro de Configuração";
-    el.routineMode.value = "crud";
+    el.routineName.value = "WDCCMOT010";
+    el.routineTitle.value = "Motivos de Parada";
+    el.routineMode.value = "grid";
     el.windowWidth.value = 108;
     el.windowHeight.value = 28;
-    el.dataVariable.value = "WDOMCFG";
+    el.dataVariable.value = "WDCCMOT";
 
-    el.useTabs.checked = true;
+    el.useTabs.checked = false;
     el.sheetId.value = "sheet1";
     el.tabPanelLine.value = 2;
     el.tabPanelColumn.value = 1;
     el.tabPanelHeight.value = 20;
-    el.tabPanelWidth.value = 80;
+    el.tabPanelWidth.value = 106;
     el.generateSaveAnother.value = "0";
 
     el.useRules.checked = true;
-    el.rgRoutineName.value = "WDOMTESTEURG";
-    el.entityName.value = "Configuracao";
-    el.globalName.value = "WDOMCFG";
+    el.rgRoutineName.value = "WDCCMOT010RG";
+    el.entityName.value = "Motivo";
+    el.globalName.value = "WDCCMOT";
     if (el.useRoutineCompany) el.useRoutineCompany.checked = false;
     el.generateObtain.checked = true;
     el.generateSave.checked = true;
     el.generateDelete.checked = true;
     el.generateLock.checked = true;
+    if (el.lockTimeout) el.lockTimeout.value = 3;
 
     el.useBtnManter.checked = true;
     el.btnManterColumn.value = 1;
-    el.btnManterLine.value = 21;
+    el.btnManterLine.value = 26;
     el.btnManterLocation.value = "parent";
 
     el.gridCode.value = 1;
-    el.gridLinePosition.value = 2;
-    el.gridHeight.value = 17;
-    el.gridLineStart.value = 2;
-    el.gridLineEnd.value = 20;
+    el.gridLinePosition.value = 6;
+    el.gridHeight.value = 16;
+    el.gridLineStart.value = 7;
+    el.gridLineEnd.value = 21;
     el.gridNavigation.value = "1";
-    el.gridWorkGlobal.value = "mtempWDOMTESTEU";
+    el.gridWorkGlobal.value = "mtempWDCCMOT010";
     if (app.grid && typeof app.grid.renderWorkGlobalParameterEditor === "function") {
       app.grid.renderWorkGlobalParameterEditor([
-        { name: "term", argument: "CT" },
-        { name: "codSequencia", argument: "CODSEQUENCIA" }
+        { name: "term", argument: "CT" }
       ]);
     } else if (el.gridWorkGlobalParameters) {
-      el.gridWorkGlobalParameters.value = "term=CT,codSequencia=CODSEQUENCIA";
+      el.gridWorkGlobalParameters.value = "term=CT";
     }
-    if (el.gridUseConsultButton) el.gridUseConsultButton.checked = true;
-    if (el.gridConsultButtonColumn) el.gridConsultButtonColumn.value = 50;
-    if (el.gridConsultButtonLine) el.gridConsultButtonLine.value = 1;
-    if (el.gridCheckGlobal) el.gridCheckGlobal.value = "mtempWDOMTESTEUCHECK";
+    if (el.gridUseConsultButton) el.gridUseConsultButton.checked = false;
+    if (el.gridCheckGlobal) el.gridCheckGlobal.value = "";
     el.gridEditLabel.value = "TbCellClick";
     el.gridInlineMaintenance.checked = false;
     if (el.gridAutoButtonPosition) el.gridAutoButtonPosition.checked = true;
     el.gridMaintenanceButtonColumn.value = 1;
-    el.gridMaintenanceButtonLine.value = 24;
+    el.gridMaintenanceButtonLine.value = 23;
     el.gridSaveButtonLine.value = 26;
     el.gridAllowInsert.checked = true;
     el.gridAllowRemove.checked = true;
     el.gridRowEnter.checked = true;
 
     state.customButtons = [];
-
-    const tabDados = createTab({
-      title: "Dados Gerais",
-      routineName: "WDOMTESTEUTAB1",
-      dataVariable: "WDOMCFG",
-      globalSubscript: "4"
-    });
-
-    const tabParametros = createTab({
-      title: "Parâmetros",
-      routineName: "WDOMTESTEUTAB2",
-      dataVariable: "WDOMCFGPAR",
-      globalSubscript: "5"
-    });
-
-    const tabTiposNota = createTab({
-      title: "Tipos de Nota",
-      routineName: "WDOMTESTEUTAB3",
-      dataVariable: "WDOMCFGTIP",
-      globalSubscript: "6"
-    });
-
-    const tabClientes = createTab({
-      title: "Clientes",
-      routineName: "WDOMTESTEUTAB4",
-      contentType: "grid",
-      gridRgRoutineName: "WDOMTESTEUTAB4RG",
-      globalSubscript: "7"
-    });
-
-    state.tabs = [tabDados, tabParametros, tabTiposNota, tabClientes];
+    state.ruleHooks = {};
+    state.tabs = [];
 
     const codEmpresa = app.fields.createField({
       description: "Código da Empresa",
@@ -600,148 +661,35 @@
       isKey: true,
       required: true,
       labelColumn: 1,
-      labelLine: 2,
+      labelLine: 1,
       labelSize: 18,
-      inputColumn: 19,
-      inputLine: 2,
+      inputColumn: 20,
+      inputLine: 1,
       inputSize: 4,
       hasDisplay: true,
       displayColumn: 25,
-      displayLine: 2,
-      displaySize: 25
+      displayLine: 1,
+      displaySize: 40
     });
 
     app.fieldLookups.applyPresetToField(codEmpresa, "empresa");
 
     const codigo = app.fields.createField({
-      description: "Código",
+      description: "Código do Motivo",
       variable: "CODIGO",
       type: "integer",
       tabId: "parent",
       isKey: true,
       required: true,
       labelColumn: 1,
-      labelLine: 3,
+      labelLine: 2,
       labelSize: 18,
-      inputColumn: 19,
-      inputLine: 3,
-      inputSize: 10
-    });
-
-    const descricao = app.fields.createField({
-      description: "Descrição",
-      variable: "DESCRICAO",
-      type: "string",
-      tabId: tabDados.id,
-      required: true,
-      labelColumn: 1,
-      labelLine: 1,
-      labelSize: 14,
-      inputColumn: 15,
-      inputLine: 1,
-      inputSize: 45
-    });
-
-    const situacao = app.fields.createField({
-      description: "Situação",
-      variable: "SITUACAO",
-      type: "combo",
-      tabId: tabDados.id,
-      required: true,
-      labelColumn: 1,
-      labelLine: 2,
-      labelSize: 14,
-      inputColumn: 15,
+      inputColumn: 20,
       inputLine: 2,
-      inputSize: 10,
-      optionsVariable: "TABSIT",
-      createOptionsTable: true,
-      optionsItems: [
-        { value: "0", description: "Inativo" },
-        { value: "1", description: "Ativo" }
-      ]
+      inputSize: 6
     });
 
-    const codCliente = app.fields.createField({
-      description: "Código Cliente",
-      variable: "CODCLI",
-      type: "integer",
-      tabId: tabDados.id,
-      required: false,
-      labelColumn: 1,
-      labelLine: 3,
-      labelSize: 14,
-      inputColumn: 15,
-      inputLine: 3,
-      inputSize: 20,
-      hasDisplay: true,
-      displayColumn: 37,
-      displayLine: 3,
-      displaySize: 30
-    });
-
-    app.fieldLookups.applyPresetToField(codCliente, "cliente");
-
-    const observacao = app.fields.createField({
-      description: "Observação",
-      variable: "OBSERVACAO",
-      type: "string",
-      tabId: tabParametros.id,
-      required: false,
-      labelColumn: 1,
-      labelLine: 1,
-      labelSize: 14,
-      inputColumn: 15,
-      inputLine: 1,
-      inputSize: 60
-    });
-
-    const dataCadastro = app.fields.createField({
-      description: "Data do Cadastro",
-      variable: "DATCAD",
-      type: "date",
-      tabId: tabParametros.id,
-      required: false,
-      labelColumn: 1,
-      labelLine: 2,
-      labelSize: 14,
-      inputColumn: 15,
-      inputLine: 2,
-      inputSize: 8
-    });
-
-    const tiposNota = app.fields.createField({
-      description: "Tipo de Nota",
-      variable: "TIPNOT",
-      type: "multiSelect",
-      tabId: tabTiposNota.id,
-      required: true,
-      labelColumn: 1,
-      labelLine: 1,
-      labelSize: 14,
-      inputColumn: 16,
-      inputLine: 1,
-      inputSize: 7,
-      hasDisplay: true,
-      displayColumn: 25,
-      displayLine: 1,
-      displaySize: 20,
-      multiSelectTableVariable: "TABNOT",
-      multiSelectSelectedText: "Selecionados"
-    });
-
-    app.fieldLookups.applyPresetToField(tiposNota, "tipoNotaMulti");
-
-    state.fields = [
-      codEmpresa,
-      codigo,
-      descricao,
-      situacao,
-      codCliente,
-      observacao,
-      dataCadastro,
-      tiposNota
-    ];
+    state.fields = [codEmpresa, codigo];
 
     state.globalIndexes = [
       app.indexes.createKey(codEmpresa.id, "codEmpresa"),
@@ -749,16 +697,51 @@
     ];
 
     app.grid.resetLocations();
-    app.grid.ensureLocation(tabClientes.id, {
-      gridCode: 41,
-      gridWorkGlobal: "mtempWDOMTESTEUTAB4",
-      gridLinePosition: 1,
-      gridHeight: 15,
-      gridLineStart: 2,
-      gridLineEnd: 15
+    app.grid.ensureLocation("parent", {
+      gridCode: 1,
+      gridWorkGlobal: "mtempWDCCMOT010",
+      gridLinePosition: 6,
+      gridHeight: 16,
+      gridLineStart: 7,
+      gridLineEnd: 21
     });
-    app.grid.selectLocation(tabClientes.id);
-    app.grid.loadDefaultColumns();
+    app.grid.selectLocation("parent");
+
+    state.gridColumns = [
+      app.grid.createColumn({
+        title: "Setor",
+        type: "n",
+        width: 8,
+        variable: "CODSETOR",
+        recordKey: true
+      }),
+      app.grid.createColumn({
+        title: "Descrição do Setor",
+        type: "a",
+        width: 30,
+        variable: "DESCSETOR",
+        workPiece: 1
+      }),
+      app.grid.createColumn({
+        title: "Tempo Meta",
+        type: "decimal",
+        width: 12,
+        variable: "TEMPOMETA",
+        workPiece: 2,
+        editable: true
+      }),
+      app.grid.createColumn({
+        title: "Vigência",
+        type: "d",
+        width: 12,
+        variable: "VIGENCIA",
+        workPiece: 3,
+        editable: true
+      })
+    ];
+
+    app.grid.saveActive();
+    app.grid.render();
 
     if (app.customButtons && typeof app.customButtons.render === "function") {
       app.customButtons.render();
@@ -773,7 +756,72 @@
     app.indexes.render();
     app.refresh();
     setPreview("parent");
-    u.showToast("Padrão completo carregado.");
+    u.showToast("Padrão simples carregado.");
+  }
+
+  function clearProject() {
+    state.layoutSuggestions = {
+      tabPanelLineAuto: true,
+      tabPanelHeightAuto: true,
+      btnManterLineAuto: true,
+      windowHeightAuto: true
+    };
+
+    el.routineName.value = "";
+    el.routineTitle.value = "";
+    el.routineMode.value = "crud";
+    el.windowWidth.value = 108;
+    el.windowHeight.value = 28;
+    el.dataVariable.value = "";
+
+    el.useTabs.checked = false;
+    el.sheetId.value = "sheet1";
+    el.tabPanelLine.value = 2;
+    el.tabPanelColumn.value = 1;
+    el.tabPanelHeight.value = 20;
+    el.tabPanelWidth.value = 106;
+    el.generateSaveAnother.value = "0";
+
+    el.useRules.checked = true;
+    el.rgRoutineName.value = "";
+    el.entityName.value = "";
+    el.globalName.value = "";
+    if (el.useRoutineCompany) el.useRoutineCompany.checked = false;
+    el.generateObtain.checked = true;
+    el.generateSave.checked = true;
+    el.generateDelete.checked = true;
+    el.generateLock.checked = true;
+    if (el.lockTimeout) el.lockTimeout.value = 3;
+
+    el.useBtnManter.checked = false;
+    el.btnManterColumn.value = 1;
+    el.btnManterLine.value = 26;
+    el.btnManterLocation.value = "parent";
+
+    state.fields = [];
+    state.tabs = [];
+    state.globalIndexes = [];
+    state.customButtons = [];
+    state.gridColumns = [];
+    state.ruleHooks = {};
+
+    app.grid.resetLocations();
+    app.grid.render();
+
+    if (app.customButtons && typeof app.customButtons.render === "function") {
+      app.customButtons.render();
+    }
+
+    state.activeMacRoutine = "parent";
+    state.activeRuleRoutine = "rg";
+
+    toggleSections();
+    renderTabs();
+    app.fields.render();
+    app.indexes.render();
+    app.refresh();
+    setPreview("parent");
+    u.showToast("Tela limpa.");
   }
 
   function registerFieldEvents() {
@@ -873,6 +921,44 @@
     el.addKeyIndexButton.addEventListener("click", () => app.indexes.addKey());
     el.addFixedIndexButton.addEventListener("click", () => app.indexes.addFixed());
     el.loadExampleButton.addEventListener("click", loadExample);
+
+    if (el.clearProjectButton) {
+      el.clearProjectButton.addEventListener("click", clearProject);
+    }
+
+    [el.generateOwnF7, el.ownF7DescriptionField, el.btnManterAlignment]
+      .filter(Boolean)
+      .forEach((input) => input.addEventListener("change", () => app.refresh()));
+
+    if (el.btnManterColumn && el.btnManterAlignment) {
+      el.btnManterColumn.addEventListener("input", () => {
+        el.btnManterAlignment.value = "manual";
+      });
+    }
+
+    if (el.saveOwnF7Button) {
+      el.saveOwnF7Button.addEventListener("click", () => {
+        const definition = app.f7.ownLookupDefinition();
+
+        if (!definition) {
+          u.showToast("Marque a opção e escolha o campo do display primeiro.");
+          return;
+        }
+
+        const guardado = app.fieldLookups.saveLookup({
+          key: `own-${definition.routineName}-${definition.label}`.toLowerCase(),
+          label: `${definition.entity} (${definition.label}^${definition.routineName})`,
+          f7Routine: `${definition.label}^${definition.routineName}`,
+          extraVariables: definition.company ? "CODEMP" : ""
+        });
+
+        u.showToast(
+          guardado
+            ? `F7 guardado: ${definition.label}^${definition.routineName}`
+            : "Não foi possível guardar no catálogo."
+        );
+      });
+    }
 
     el.showMacPreviewButton.addEventListener("click", () =>
       setPreview("parent")
@@ -976,7 +1062,16 @@
     el.btnManterLine.addEventListener("input", () => {
       state.layoutSuggestions = state.layoutSuggestions || {};
       state.layoutSuggestions.btnManterLineAuto = false;
+      if (el.btnManterLineAuto) el.btnManterLineAuto.checked = false;
     });
+
+    if (el.btnManterLineAuto) {
+      el.btnManterLineAuto.addEventListener("change", () => {
+        state.layoutSuggestions = state.layoutSuggestions || {};
+        state.layoutSuggestions.btnManterLineAuto = el.btnManterLineAuto.checked;
+        app.refresh();
+      });
+    }
 
     el.btnManterLocation.addEventListener("change", () => {
       state.layoutSuggestions = state.layoutSuggestions || {};

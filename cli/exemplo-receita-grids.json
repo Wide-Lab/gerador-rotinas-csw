@@ -1,0 +1,421 @@
+{
+  "routine": {
+    "name": "WDOMTESTETI",
+    "title": "Configuração Padrão de Receita",
+    "mode": "crud",
+    "dataVariable": "WDOMTESTETI",
+    "useTabs": true,
+    "useRules": true,
+    "rgRoutineName": "WDOMTESTETIRG",
+    "entityName": "CfgReceita",
+    "globalName": "WDOMTESTETI",
+    "useRoutineCompany": true,
+    "useBtnManter": true,
+    "generateDelete": true,
+    "width": 108,
+    "height": 28
+  },
+  "tabs": [
+    {
+      "id": "tempo",
+      "title": "Tempo",
+      "routineName": "WDOMTESTETITAB1",
+      "gridRgRoutineName": "WDOMTESTETITAB1RG",
+      "globalSubscript": "1",
+      "contentType": "grid",
+      "saveFields": true
+    },
+    {
+      "id": "componentes",
+      "title": "Componentes",
+      "routineName": "WDOMTESTETITAB2",
+      "gridRgRoutineName": "WDOMTESTETITAB2RG",
+      "globalSubscript": "2",
+      "contentType": "grid"
+    },
+    {
+      "id": "excecoes",
+      "title": "Exceções",
+      "routineName": "WDOMTESTETITAB3",
+      "gridRgRoutineName": "WDOMTESTETITAB3RG",
+      "globalSubscript": "3",
+      "contentType": "grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "prg",
+      "description": "Programa",
+      "variable": "CODPRG",
+      "type": "integer",
+      "tabId": "parent",
+      "isKey": true,
+      "required": true,
+      "inputSize": 3,
+      "lookupPreset": "custom",
+      "f7Routine": "PROGRA^CCTTG299",
+      "f8Routine": "^CCTTG035",
+      "extraVariables": "TTGTAB6",
+      "hasDisplay": true,
+      "displayLoadMode": "valcp",
+      "valcpCode": "set sc=$$VerPrograma^CCTTGRG001(CE,{reference},.TTGTAB6)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0\n;\ndo Set^%CSW1UTI(%PRG,\"{display}\",$piece(TTGTAB6,Z,1))",
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 20,
+      "inputColumn": 22,
+      "inputLine": 1,
+      "displayColumn": 27,
+      "displayLine": 1,
+      "displaySize": 40
+    },
+    {
+      "id": "pi",
+      "description": "Processo Industrial",
+      "variable": "CODPI",
+      "type": "integer",
+      "tabId": "tempo",
+      "required": true,
+      "inputSize": 3,
+      "lookupPreset": "custom",
+      "f7Routine": "PI^CCTTG299",
+      "f8Routine": "^CCTTG010",
+      "extraVariables": "TTGTAB1",
+      "hasDisplay": true,
+      "displayLoadMode": "valcp",
+      "valcpCode": "set sc=$$VerProcessoIndustrial^CCTTGRG001(CE,{reference},.TTGTAB1)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0\n;\ndo Set^%CSW1UTI(%PRG,\"{display}\",$piece(TTGTAB1,Z,1))",
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 20,
+      "inputColumn": 22,
+      "inputLine": 1,
+      "displayColumn": 27,
+      "displayLine": 1,
+      "displaySize": 40
+    },
+    {
+      "id": "ep",
+      "description": "EP",
+      "variable": "CODEP",
+      "type": "integer",
+      "tabId": "excecoes",
+      "required": true,
+      "inputSize": 5,
+      "lookupPreset": "custom",
+      "f7Routine": "EP^CCTTG299",
+      "f8Routine": "^CCTTG020",
+      "extraVariables": "TTGTAB2",
+      "hasDisplay": true,
+      "displayLoadMode": "valcp",
+      "valcpCode": "set sc=$$VerEspecificacaoProduto^CCTTGRG001(CE,{reference},.TTGTAB2)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0\n;\ndo Set^%CSW1UTI(%PRG,\"{display}\",$piece(TTGTAB2,Z,1))",
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 20,
+      "inputColumn": 22,
+      "inputLine": 1,
+      "displayColumn": 29,
+      "displayLine": 1,
+      "displaySize": 40,
+      "tabKey": true
+    },
+    {
+      "id": "fc",
+      "description": "FC",
+      "variable": "CODFC",
+      "type": "integer",
+      "tabId": "excecoes",
+      "required": true,
+      "inputSize": 5,
+      "lookupPreset": "custom",
+      "f7Routine": "TTGTAB12^CCTTG299",
+      "f8Routine": "^CCTTG065",
+      "extraVariables": "TTGTAB12",
+      "hasDisplay": true,
+      "displayLoadMode": "valcp",
+      "valcpCode": "set sc=$$VerFormulaCalculo^CCTTGRG001(CE,{reference},.TTGTAB12)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0\n;\ndo Set^%CSW1UTI(%PRG,\"{display}\",$piece(TTGTAB12,Z,1))",
+      "labelColumn": 1,
+      "labelLine": 2,
+      "labelSize": 20,
+      "inputColumn": 22,
+      "inputLine": 2,
+      "displayColumn": 29,
+      "displayLine": 2,
+      "displaySize": 40,
+      "tabKey": true
+    }
+  ],
+  "indexes": [
+    {
+      "type": "key",
+      "fieldId": "prg",
+      "parameterName": "codPrograma"
+    }
+  ],
+  "grids": [
+    {
+      "location": "tempo",
+      "code": 41,
+      "line": 3,
+      "height": 13,
+      "maintenance": true,
+      "allowInsert": true,
+      "allowRemove": true,
+      "columns": [
+        {
+          "title": "Sequência",
+          "type": "n",
+          "width": 4,
+          "variable": "SEQ",
+          "recordKey": true
+        },
+        {
+          "title": "Temp. Inicial",
+          "type": "n",
+          "width": 6,
+          "variable": "TEMINI",
+          "editable": true,
+          "workPiece": 1
+        },
+        {
+          "title": "Temp. Final",
+          "type": "n",
+          "width": 6,
+          "variable": "TEMFIN",
+          "editable": true,
+          "workPiece": 2
+        },
+        {
+          "title": "Minutos",
+          "type": "n",
+          "width": 5,
+          "variable": "MINUTO",
+          "editable": true,
+          "workPiece": 3
+        },
+        {
+          "title": "Passo",
+          "type": "n",
+          "width": 3,
+          "variable": "PASSO",
+          "editable": true,
+          "workPiece": 4
+        },
+        {
+          "title": "Seq",
+          "type": "a",
+          "width": 4,
+          "variable": "SEQALF",
+          "editable": true,
+          "workPiece": 5
+        },
+        {
+          "title": "Fase",
+          "type": "n",
+          "width": 3,
+          "variable": "FASE",
+          "editable": true,
+          "workPiece": 6
+        },
+        {
+          "title": "Obs",
+          "type": "n",
+          "width": 3,
+          "variable": "CODOBS",
+          "editable": true,
+          "workPiece": 7,
+          "lookupPreset": "custom",
+          "f7Routine": "TTGTAB14^CCTTG299",
+          "f8Routine": "^CCTTG095",
+          "extraVariables": "TTGTAB14",
+          "valcpCode": "if {reference}=\"\" quit $$$OK\nset sc=$$VerObservacao^CCTTGRG001(CE,{reference},.TTGTAB14)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0"
+        },
+        {
+          "title": "Descrição",
+          "type": "a",
+          "width": 30,
+          "variable": "DESOBS",
+          "displayOnly": true,
+          "displayExpression": "$$ObterDescricaoObservacao^WDOMTESTETIRG(codEmpresa,codobs)"
+        }
+      ],
+      "startLine": 4,
+      "endLine": 14,
+      "autoSequence": "auto"
+    },
+    {
+      "location": "componentes",
+      "code": 42,
+      "line": 1,
+      "height": 15,
+      "maintenance": true,
+      "allowInsert": true,
+      "allowRemove": true,
+      "columns": [
+        {
+          "title": "Sequência",
+          "type": "n",
+          "width": 4,
+          "variable": "SEQ",
+          "recordKey": true
+        },
+        {
+          "title": "Componente",
+          "type": "n",
+          "width": 10,
+          "variable": "CODCOM",
+          "editable": true,
+          "required": true,
+          "workPiece": 1,
+          "lookupPreset": "custom",
+          "f7Routine": "CGIGEN^CCTTR299",
+          "extraVariables": "CGIGEN",
+          "valcpCode": "set sc=$$VerItem^CCCGIRG001({reference},.CGIGEN)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0\nif $piece(CGIGEN,Z,6)=2 do ME^%CSUTIUD(\"Componente é sintético!\") quit 0"
+        },
+        {
+          "title": "Descrição Componente",
+          "type": "a",
+          "width": 30,
+          "variable": "DESCOM",
+          "displayOnly": true,
+          "displayExpression": "$$ObterDescricaoItem^WDOMTESTETIRG(codcom)"
+        },
+        {
+          "title": "Concentração",
+          "type": "v3",
+          "width": 10,
+          "variable": "CONCEN",
+          "editable": true,
+          "workPiece": 2
+        },
+        {
+          "title": "OC",
+          "type": "n",
+          "width": 2,
+          "variable": "CODOC",
+          "editable": true,
+          "workPiece": 3,
+          "lookupPreset": "custom",
+          "f7Routine": "TTGTAB20^CCTTG299",
+          "f8Routine": "^CCTTG015",
+          "extraVariables": "TTGTAB20",
+          "valcpCode": "if {reference}=\"\" quit $$$OK\nset sc=$$VerOrigemComponReceita^CCTTGRG001(CE,{reference},.TTGTAB20)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0"
+        },
+        {
+          "title": "FC",
+          "type": "n",
+          "width": 3,
+          "variable": "CODFC",
+          "editable": true,
+          "workPiece": 4,
+          "lookupPreset": "custom",
+          "f7Routine": "TTGTAB12^CCTTG299",
+          "f8Routine": "^CCTTG065",
+          "extraVariables": "TTGTAB12",
+          "valcpCode": "if {reference}=\"\" quit $$$OK\nset sc=$$VerFormulaCalculo^CCTTGRG001(CE,{reference},.TTGTAB12)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0"
+        },
+        {
+          "title": "SG",
+          "type": "n",
+          "width": 3,
+          "variable": "SEQGRA",
+          "editable": true,
+          "workPiece": 5
+        },
+        {
+          "title": "DP",
+          "type": "n",
+          "width": 4,
+          "variable": "CODDP",
+          "editable": true,
+          "workPiece": 6,
+          "lookupPreset": "custom",
+          "f7Routine": "DP^CCTTG299",
+          "f8Routine": "^CCTTG070",
+          "extraVariables": "TTGTAB5",
+          "valcpCode": "if {reference}=\"\" quit $$$OK\nset sc=$$VerDescricaoProduto^CCTTGRG001(CE,{reference},.TTGTAB5)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0"
+        }
+      ],
+      "startLine": 2,
+      "endLine": 14,
+      "autoSequence": "editavel"
+    },
+    {
+      "location": "excecoes",
+      "code": 43,
+      "line": 4,
+      "height": 12,
+      "maintenance": true,
+      "allowInsert": true,
+      "allowRemove": true,
+      "columns": [
+        {
+          "title": "Sequência",
+          "type": "n",
+          "width": 4,
+          "variable": "SEQ",
+          "recordKey": true
+        },
+        {
+          "title": "Componente",
+          "type": "n",
+          "width": 10,
+          "variable": "CODCOM",
+          "editable": true,
+          "required": true,
+          "workPiece": 1,
+          "lookupPreset": "custom",
+          "f7Routine": "CGIGEN^CCTTR299",
+          "extraVariables": "CGIGEN",
+          "valcpCode": "set sc=$$VerItem^CCCGIRG001({reference},.CGIGEN)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0"
+        },
+        {
+          "title": "Descrição Componente",
+          "type": "a",
+          "width": 30,
+          "variable": "DESCOM",
+          "displayOnly": true,
+          "displayExpression": "$$ObterDescricaoItem^WDOMTESTETIRG(codcom)"
+        },
+        {
+          "title": "Posição",
+          "type": "n",
+          "width": 10,
+          "variable": "POSICA",
+          "editable": true,
+          "required": true,
+          "workPiece": 2,
+          "maintenanceType": "combo",
+          "optionsVariable": "TABPOS",
+          "createOptionsTable": true,
+          "optionsItems": [
+            {
+              "value": "1",
+              "description": "Primeira"
+            },
+            {
+              "value": "2",
+              "description": "Última"
+            }
+          ]
+        }
+      ],
+      "startLine": 5,
+      "endLine": 14,
+      "autoSequence": "auto"
+    }
+  ],
+  "buttons": [
+    {
+      "id": "dup",
+      "text": "<u>D</u>uplicar",
+      "shortcut": "d",
+      "icon": "copy",
+      "location": "parent",
+      "actionType": "duplicate",
+      "actionLabel": "3700"
+    }
+  ],
+  "ruleHooks": {
+    "deleteValidation": "set sc=$$ValidarVinculoReceita(codEmpresa,codPrograma)\nif $$$ISERR(sc) quit sc",
+    "extraMethods": "; Validar Vínculo com Receita\n;\n; set sc=$$ValidarVinculoReceita^WDOMTESTETIRG(codEmpresa,codPrograma)\nValidarVinculoReceita(codEmpresa,codPrograma)\t;\n$$$VAR\nnew codReceita,seqComponente,codVinculo\n;\nset (codReceita,codVinculo)=\"\"\nfor  set codReceita=$order(^TTRREC(codEmpresa,codReceita)) quit:codReceita=\"\"!(codVinculo'=\"\")  do\n. set seqComponente=\"\"\n. for  set seqComponente=$order(^TTRREC(codEmpresa,codReceita,seqComponente)) quit:seqComponente=\"\"!(codVinculo'=\"\")  do\n. . if $piece($get(^TTRREC(codEmpresa,codReceita,seqComponente)),Z,6)=codPrograma set codVinculo=codReceita\n;\nif codVinculo'=\"\" quit $$$ERROR(10000,\"Programa \"_codPrograma_\" vinculado à receita \"_codVinculo_\"! Exclusão não permitida.\")\n;\nquit $$$OK\n;\n; Obter Descrição da Observação\n;\n; set descricao=$$ObterDescricaoObservacao^WDOMTESTETIRG(codEmpresa,codObservacao)\nObterDescricaoObservacao(codEmpresa,codObservacao)\t;\n$$$VAR\nnew sc,ttgtab14\n;\nif $get(codObservacao)=\"\" quit \"\"\nset sc=$$VerObservacao^CCTTGRG001(codEmpresa,codObservacao,.ttgtab14)\nif $$$ISERR(sc) quit \"\"\n;\nquit $piece(ttgtab14,Z,1)\n;\n; Obter Descrição do Item\n;\n; set descricao=$$ObterDescricaoItem^WDOMTESTETIRG(codItem)\nObterDescricaoItem(codItem)\t;\n$$$VAR\nnew sc,cgigen\n;\nif $get(codItem)=\"\" quit \"\"\nset sc=$$VerItem^CCCGIRG001(codItem,.cgigen)\nif $$$ISERR(sc) quit \"\"\n;\nquit $piece(cgigen,Z,1)"
+  }
+}

@@ -5,7 +5,11 @@
     ["a", "Alfanumérico"],
     ["n", "Numérico"],
     ["d", "Data"],
-    ["v3", "Valor / decimal"],
+    ["v0", "Valor — sem casas"],
+    ["v1", "Valor — 1 casa"],
+    ["v2", "Valor — 2 casas"],
+    ["v3", "Valor — 3 casas"],
+    ["v4", "Valor — 4 casas"],
     ["checkheader", "Check com cabeçalho"]
   ];
 
@@ -31,6 +35,7 @@
     "gridCheckGlobal",
     "gridEditLabel",
     "gridInlineMaintenance",
+    "gridInlineSaveOnConfirm",
     "gridAutoButtonPosition",
     "gridMaintenanceButtonColumn",
     "gridMaintenanceButtonLine",
@@ -40,8 +45,30 @@
     "gridRowEnter",
     "gridUseConsultButton",
     "gridConsultButtonColumn",
-    "gridConsultButtonLine"
+    "gridConsultButtonLine",
+    "gridFinalFocus",
+    "gridAutoSequence"
   ]);
+
+  function normalizeDynamicColumns(value) {
+    if (!value || typeof value !== "object") return null;
+    const load = String(value.load || "").trim();
+    if (!load) return null;
+    return {
+      load,
+      table: u.normalizeVariable(value.table || "TABCOLDIN", "TABCOLDIN"),
+      firstWorkPiece: Number(value.firstWorkPiece) || 1
+    };
+  }
+
+  function dynamicColumnsOf(config) {
+    return config && config.gridDynamicColumns && !config.gridInTab ? config.gridDynamicColumns : null;
+  }
+
+  function autoSequenceMode(config) {
+    const mode = String(config.gridAutoSequence || "").trim().toLowerCase();
+    return ["auto", "editavel"].includes(mode) ? mode : "";
+  }
 
 
   function normalizeWorkGlobalParameterSource(source) {
@@ -216,15 +243,27 @@
     );
   }
 
+  function buttonsAboveGridLines(locationId, fieldsLine) {
+    if (!app.customButtons || typeof app.customButtons.buttonsForLocation !== "function") return [];
+    return app.customButtons
+      .buttonsForLocation(locationId)
+      .filter((button) => button.positionMode === "manual")
+      .map((button) => Number(button.line) || 0)
+      .filter((line) => line > 0 && line <= Math.max(fieldsLine, 0) + 1);
+  }
+
   function fieldHeight(field) {
     return field.type === "textArea" ? Math.max(1, Number(field.textAreaHeight) || 3) : 1;
   }
 
   function suggestedGridLinePosition(locationId = "parent") {
-    const lastLine = lastFieldLine(locationId);
+    const fieldsLine = lastFieldLine(locationId);
+    const lastLine = Math.max(fieldsLine, ...buttonsAboveGridLines(locationId, fieldsLine));
 
     if (lastLine < 0) return 1;
     if (lastLine === 0) return 2;
+
+    if (locationId === "parent" && app.getConfig().routineMode === "grid") return lastLine + 1;
 
     return lastLine + 2;
   }
@@ -246,6 +285,9 @@
       gridLinePosition:
         Number(overrides.gridLinePosition) || suggestedGridLinePosition(locationId),
       gridLinePositionAuto: overrides.gridLinePositionAuto !== false,
+      gridColumnPosition: Number(overrides.gridColumnPosition) || 0,
+      gridDynamicColumns: normalizeDynamicColumns(overrides.gridDynamicColumns),
+      gridTableWidth: Number(overrides.gridTableWidth) || 0,
       gridHeight: Number(overrides.gridHeight) || 17,
       gridLineStart: Number(overrides.gridLineStart) || 2,
       gridLineEnd,
@@ -264,6 +306,7 @@
       gridEditLabel: u.sanitize(overrides.gridEditLabel || "TbCellClick"),
       gridMaintenance: overrides.gridMaintenance === true,
       gridInlineMaintenance: overrides.gridInlineMaintenance === true || overrides.gridMaintenance === true,
+      gridInlineSaveOnConfirm: overrides.gridInlineSaveOnConfirm === true,
       gridAutoButtonPosition: overrides.gridAutoButtonPosition !== false,
       gridMaintenanceButtonColumn: Number(overrides.gridMaintenanceButtonColumn) || 1,
       gridMaintenanceButtonLine:
@@ -278,7 +321,11 @@
       gridRowEnter: overrides.gridRowEnter !== false,
       gridUseConsultButton: overrides.gridUseConsultButton !== false,
       gridConsultButtonColumn: Number(overrides.gridConsultButtonColumn) || 86,
-      gridConsultButtonLine: Number(overrides.gridConsultButtonLine) || 1
+      gridConsultButtonLine: Number(overrides.gridConsultButtonLine) || 1,
+      gridFinalFocus: String(overrides.gridFinalFocus || "auto").trim() || "auto",
+      gridAutoSequence: ["auto", "editavel"].includes(String(overrides.gridAutoSequence || "").trim().toLowerCase())
+        ? String(overrides.gridAutoSequence).trim().toLowerCase()
+        : ""
     };
   }
 
@@ -335,6 +382,9 @@
       gridLinePosition:
         Number(el.gridLinePosition.value) || suggestedGridLinePosition(state.activeGridLocation || "parent"),
       gridLinePositionAuto: currentSettings.gridLinePositionAuto !== false,
+      gridColumnPosition: Number(currentSettings.gridColumnPosition) || 0,
+      gridDynamicColumns: normalizeDynamicColumns(currentSettings.gridDynamicColumns),
+      gridTableWidth: Number(currentSettings.gridTableWidth) || 0,
       gridHeight: Number(el.gridHeight.value) || 17,
       gridLineStart: Number(el.gridLineStart.value) || 2,
       gridLineEnd: Number(el.gridLineEnd.value) || 20,
@@ -349,6 +399,7 @@
       gridEditLabel: u.sanitize(el.gridEditLabel.value) || "TbCellClick",
       gridMaintenance: el.gridInlineMaintenance.checked,
       gridInlineMaintenance: el.gridInlineMaintenance.checked,
+      gridInlineSaveOnConfirm: el.gridInlineSaveOnConfirm ? el.gridInlineSaveOnConfirm.checked : false,
       gridAutoButtonPosition: automaticButtonPosition,
       gridMaintenanceButtonColumn: automaticButtonPosition
         ? 1
@@ -366,7 +417,11 @@
       gridRowEnter: el.gridRowEnter.checked,
       gridUseConsultButton: el.gridUseConsultButton?.checked !== false,
       gridConsultButtonColumn: Number(el.gridConsultButtonColumn?.value) || 86,
-      gridConsultButtonLine: Number(el.gridConsultButtonLine?.value) || 1
+      gridConsultButtonLine: Number(el.gridConsultButtonLine?.value) || 1,
+      gridFinalFocus: String(el.gridFinalFocus?.value || "auto").trim() || "auto",
+      gridAutoSequence: el.gridAutoSequence
+        ? String(el.gridAutoSequence.value || "")
+        : String(currentSettings.gridAutoSequence || "")
     };
   }
 
@@ -384,6 +439,9 @@
     if (el.gridCheckGlobal) el.gridCheckGlobal.value = settings.gridCheckGlobal || `${settings.gridWorkGlobal || "mtempGRID"}CHECK`;
     el.gridEditLabel.value = settings.gridEditLabel;
     el.gridInlineMaintenance.checked = settings.gridMaintenance === true;
+    if (el.gridInlineSaveOnConfirm) {
+      el.gridInlineSaveOnConfirm.checked = settings.gridInlineSaveOnConfirm === true;
+    }
     if (el.gridAutoButtonPosition) {
       el.gridAutoButtonPosition.checked = settings.gridAutoButtonPosition !== false;
     }
@@ -392,10 +450,12 @@
     el.gridSaveButtonLine.value = settings.gridSaveButtonLine;
     el.gridAllowInsert.checked = settings.gridAllowInsert !== false;
     el.gridAllowRemove.checked = settings.gridAllowRemove !== false;
+    if (el.gridAutoSequence) el.gridAutoSequence.value = settings.gridAutoSequence || "";
     el.gridRowEnter.checked = settings.gridRowEnter !== false;
     if (el.gridUseConsultButton) el.gridUseConsultButton.checked = settings.gridUseConsultButton !== false;
     if (el.gridConsultButtonColumn) el.gridConsultButtonColumn.value = settings.gridConsultButtonColumn || 86;
     if (el.gridConsultButtonLine) el.gridConsultButtonLine.value = settings.gridConsultButtonLine || 1;
+    renderFinalFocusOptions(settings.gridFinalFocus);
 
     if (el.gridMaintenanceOptions) {
       el.gridMaintenanceOptions.classList.toggle(
@@ -663,7 +723,8 @@
       return "n";
     }
     if (["d", "date", "data"].includes(clean)) return "d";
-    if (["v3", "decimal", "float", "value", "valor"].includes(clean)) return "v3";
+    if (/^v[0-9]$/.test(clean)) return clean;
+    if (["decimal", "float", "value", "valor"].includes(clean)) return "v3";
     if (["a", "string", "text", "texto", "alphanumeric", "alfanumerico", "alfanumérico"].includes(clean)) {
       return "a";
     }
@@ -698,7 +759,7 @@
   function inferredMaintenanceType(column) {
     if (column.type === "n") return "integer";
     if (column.type === "d") return "date";
-    if (column.type === "v3") return "decimal";
+    if (/^v[0-9]$/.test(column.type)) return "decimal";
     return "string";
   }
 
@@ -724,7 +785,7 @@
       displayExpression: checkHeader ? "" : String(overrides.displayExpression || ""),
       detail: checkHeader ? false : (overrides.detail === true || recordKey),
       recordKey,
-      editable: checkHeader ? false : (overrides.editable === true || recordKey),
+      editable: checkHeader ? false : overrides.editable === false ? false : (overrides.editable === true || recordKey),
       maintenanceType: checkHeader ? "auto" : (overrides.maintenanceType || "auto"),
       required: checkHeader ? false : (overrides.required === true || recordKey),
       lockOnEdit: checkHeader ? false : (overrides.lockOnEdit === undefined ? recordKey : overrides.lockOnEdit === true),
@@ -732,6 +793,15 @@
       initializerCode: checkHeader ? "" : String(overrides.initializerCode || ""),
       obtainCode: checkHeader ? "" : String(overrides.obtainCode || ""),
       f7Routine: checkHeader ? "" : String(overrides.f7Routine || ""),
+      f8Routine: checkHeader ? "" : String(overrides.f8Routine || ""),
+      backgroundColor: checkHeader ? "" : String(overrides.backgroundColor || ""),
+      fontColor: checkHeader ? "" : String(overrides.fontColor || ""),
+      clickLabel: checkHeader ? "" : String(overrides.clickLabel || ""),
+      actionMenu: checkHeader || !Array.isArray(overrides.actionMenu)
+        ? []
+        : overrides.actionMenu
+          .filter((item) => item && String(item.text || "").trim() && String(item.label || "").trim())
+          .map((item) => ({ text: String(item.text).trim(), label: String(item.label).trim() })),
       extraVariables: String(overrides.extraVariables || ""),
       ruleVariables: String(overrides.ruleVariables || ""),
       valcpCode: checkHeader ? "" : String(overrides.valcpCode || ""),
@@ -822,6 +892,8 @@
   }
 
   function render() {
+    renderFinalFocusOptions();
+
     if (!el.gridColumnsTableBody) return;
 
     el.gridColumnsTableBody.innerHTML = "";
@@ -1150,13 +1222,85 @@
       .replace(/,+$/, "");
   }
 
-  function controlDefinition(f7Routine, cp, inlineSuffix = "") {
+  function normalizedF8Routine(source) {
+    const clean = String(source || "").trim().replace(/^,+|,+$/g, "");
+    if (!clean) return "";
+    return clean.includes("^") ? clean : `^${clean}`;
+  }
+
+  function controlDefinition(f7Routine, cp, inlineSuffix = "", f8Routine = "") {
     const f7 = normalizedF7Routine(f7Routine);
-    return `${f7 ? `,${f7}` : ","},,${cp}${inlineSuffix}`;
+    const f8 = normalizedF8Routine(f8Routine);
+    return `${f8}${f7 ? `,${f7}` : ","},,${cp}${inlineSuffix}`;
+  }
+
+  function fieldF7(field) {
+    return app.mac && typeof app.mac.fieldF7Routine === "function"
+      ? app.mac.fieldF7Routine(field)
+      : field.f7Routine;
   }
 
   function standardTail(field, cp) {
-    return `,,"${controlDefinition(field.f7Routine, cp)}")`;
+    return `,,"${controlDefinition(fieldF7(field), cp, "", field.f8Routine)}")`;
+  }
+
+  function listEmptyText(field, config) {
+    if (field.multiSelectEmptyText !== undefined && field.multiSelectEmptyText !== null) {
+      return u.escapeMac(field.multiSelectEmptyText);
+    }
+    return config.gridTab && config.gridTab.saveFields === true ? "" : "Todos";
+  }
+
+  function entryParametersOf() {
+    const hooks = (app.state && app.state.ruleHooks) || {};
+    const source = Array.isArray(hooks.entryParameters)
+      ? hooks.entryParameters
+      : String(hooks.entryParameters || "").split(",");
+    return source
+      .map((item) => u.normalizeVariable(String(item).split(":")[0].trim(), ""))
+      .filter(Boolean);
+  }
+
+  function entryLoadParameters(config) {
+    if (config && config.gridInTab) return [];
+    const hooks = (app.state && app.state.ruleHooks) || {};
+    const source = Array.isArray(hooks.entryParameters)
+      ? hooks.entryParameters
+      : String(hooks.entryParameters || "").split(",");
+    return source
+      .map((item) => String(item).split(":"))
+      .filter((parts) => parts.length > 1 && parts[1].trim())
+      .map(([variable, parameter]) => ({
+        variable: u.normalizeVariable(variable.trim(), ""),
+        parameter: parameter.trim()
+      }))
+      .filter((item) => item.variable);
+  }
+
+  function listComponent(field, label, config) {
+    const line = Number(field.inputLine) || 1;
+    const column = Number(field.inputColumn) || 1;
+    const size = Number(field.inputSize) || 8;
+    const routine = config.routineName;
+    return `do ^%CSUTIMM("${app.fields.multiSelectOptionsVariable(field)}",1,,,,"${app.fields.multiSelectTableVariable(field)}","${u.escapeMac(field.description)}",,,,,,,"${label}MM1^${routine}","${column},${line},${size},${label}^${routine}")`;
+  }
+
+  function appendListOptionLoads(lines, config) {
+    const listFields = fields(config)
+      .map(({ field }) => field)
+      .filter((field) => app.fields.isListMultiSelect(field));
+    if (!listFields.length) return;
+
+    listFields.forEach((field) => {
+      const load = String(field.multiSelectOptionsLoad || "").trim();
+      lines.push(`\t; Opções de ${u.sanitize(field.description)}`);
+      if (load) {
+        load.split(/\r?\n/).forEach((line) => lines.push(`\t${line.trim()}`));
+      } else {
+        lines.push(`\t; TODO: carregar ${app.fields.multiSelectOptionsVariable(field)}(codigo)="codigo-descrição"`);
+      }
+    });
+    lines.push("\t;");
   }
 
   function component(field, label) {
@@ -1171,7 +1315,7 @@
     const tail = standardTail(field, cp);
 
     if (field.type === "multiSelect") {
-      return `do ^%CSLE(${line},${column},${size},"${reference}",,"@'?.N",,,"${controlDefinition(field.f7Routine, cp)}")`;
+      return `do ^%CSLE(${line},${column},${size},"${reference}",,"@'?.N",,,"${controlDefinition(fieldF7(field), cp, "", field.f8Routine)}")`;
     }
 
     if (field.type === "textArea") {
@@ -1246,12 +1390,50 @@
       label: 1000 + index * 100
     }));
   }
-  function gridFinalFocusMode(config) {
-    if (!config.gridInTab) return "grid";
+  function renderFinalFocusOptions(selected) {
+    const select = el.gridFinalFocus;
+    if (!select) return;
 
-    const mode = String(config.gridTab?.finalFocus || "auto");
-    if (mode === "save" || mode === "lastField" || mode === "grid") {
-      return mode;
+    const escolhido = String(selected ?? select.value ?? "auto").trim() || "auto";
+    const opcoes = [
+      ["auto", "Automático (grid)"],
+      ["consult", "Botão Consultar"],
+      ["grid", "Primeira linha do grid"],
+      ["lastField", "Último campo"]
+    ];
+
+    app.fields
+      .mainFields()
+      .filter((field) => (field.tabId || "parent") === "parent")
+      .forEach((field, index) => {
+        const label = 1000 + index * 100;
+        opcoes.push([`campo:${label}`, `Campo ${label} — ${field.description || field.variable}`]);
+      });
+
+    select.innerHTML = opcoes
+      .map(([valor, texto]) => {
+        const marca = valor === escolhido ? " selected" : "";
+        return `<option value="${valor}"${marca}>${app.utils.escapeHtml(texto)}</option>`;
+      })
+      .join("");
+
+    if (select.value !== escolhido) select.value = "auto";
+  }
+
+  function gridFinalFocusMode(config) {
+    const mode = String(
+      (config.gridInTab ? config.gridTab?.finalFocus : config.gridFinalFocus) || "auto"
+    ).trim();
+
+    if (mode === "save" || mode === "lastField" || mode === "grid") return mode;
+    if (mode === "consult") {
+      return config.gridUseConsultButton === false ? "grid" : "consult";
+    }
+    if (mode.startsWith("campo:")) {
+      const label = mode.slice(6);
+      return fields(config).some((entry) => String(entry.label) === label)
+        ? mode
+        : "grid";
     }
 
     return "grid";
@@ -1428,6 +1610,22 @@
     const result = [];
     const seen = new Set();
 
+    const usedParameters = new Set();
+
+    function uniqueParameter(name) {
+      const base = String(name || "parametro");
+      let candidate = base;
+      let suffix = 2;
+
+      while (usedParameters.has(candidate)) {
+        candidate = `${base}${suffix}`;
+        suffix += 1;
+      }
+
+      usedParameters.add(candidate);
+      return candidate;
+    }
+
     if (config.gridInTab) {
       keyDefinitions.forEach((definition) => {
         const variable = u.normalizeVariable(definition.field.variable);
@@ -1436,7 +1634,7 @@
         result.push({
           field: definition.field,
           variable,
-          parameter: definition.parameterName,
+          parameter: uniqueParameter(definition.parameterName),
           inherited: true
         });
       });
@@ -1452,14 +1650,23 @@
       result.push({
         field,
         variable,
-        parameter: keyDefinition
-          ? keyDefinition.parameterName
-          : u.toParameter(field.description || field.variable),
+        parameter: uniqueParameter(
+          keyDefinition
+            ? keyDefinition.parameterName
+            : u.toParameter(field.description || field.variable)
+        ),
         inherited: false
       });
     });
 
     return result;
+  }
+
+  function savedFieldDefinitions(config = app.getConfig()) {
+    if (!config.gridTab || config.gridTab.saveFields !== true) return [];
+    return filterDefinitions(config).filter(
+      (definition) => !definition.inherited && !app.fields.isMultiSelect(definition.field)
+    );
   }
 
   function renderFieldCode(code, field, label, config) {
@@ -1498,8 +1705,13 @@
   function appendFields(lines, config) {
     const entries = fields(config);
 
+    const entryParameters = new Set(entryParametersOf());
+    const skipRead = (entry) => entry.field.disabled === true &&
+      (!app.fields.isKeyField(entry.field) || entryParameters.has(u.normalizeVariable(entry.field.variable, "")));
+
     entries.forEach(({ field, index, label }) => {
-      const previous = index === 0 ? "0500" : 1000 + (index - 1) * 100;
+      const previousEntry = entries.slice(0, index).reverse().find((entry) => !skipRead(entry));
+      const previous = previousEntry ? previousEntry.label : "0500";
       const next = index === entries.length - 1 ? "2000" : 1000 + (index + 1) * 100;
       const reference = app.fields.isMultiSelect(field)
         ? app.fields.multiSelectInputVariable(field)
@@ -1508,7 +1720,32 @@
       lines.push(`\t; ${u.sanitize(field.description)}`);
       lines.push(`${label}\t;`);
 
-      if (app.fields.hasDisplay(field)) {
+      if (skipRead({ field })) {
+        lines.push(`\tset sc=$$Valcp${label}()`);
+        lines.push(`\tgoto ${next}`);
+        lines.push(
+          app.fields.hasDisplay(field)
+            ? `${label}ON\tdo ClearCp^%CSW1UTI("ds${label}")`
+            : `${label}ON\t;`
+        );
+        lines.push(`\t${component(field, label)}`);
+        lines.push("\tquit");
+        lines.push("\t;");
+        return;
+      }
+
+      const enabledWhen = String(field.enabledWhen || "").trim();
+      if (enabledWhen) {
+        const clearDisplay = app.fields.hasDisplay(field) ? ` do ClearCp^%CSW1UTI("ds${label}")` : "";
+        lines.push(`\tif '(${enabledWhen}) set ${reference}="" do DisableCp^%CSW1UTI("cp${label}"),Set^%CSW1UTI(%PRG,"cp${label}","")${clearDisplay} goto ${previous}:%=140,${next}`);
+        lines.push(`\tdo EnableCp^%CSW1UTI("cp${label}")`);
+      }
+
+      const isList = app.fields.isListMultiSelect(field);
+
+      if (isList) {
+        lines.push(`${label}ON\t${listComponent(field, label, config)}`);
+      } else if (app.fields.hasDisplay(field)) {
         lines.push(`${label}ON\tdo ClearCp^%CSW1UTI("ds${label}")`);
         lines.push(`\t${component(field, label)}`);
       } else {
@@ -1517,16 +1754,23 @@
 
       lines.push("\tquit:$$CSP^%CSW1UTI()");
       lines.push("\t;");
+      const exitLabel = isList ? `${label}MM1` : `${label}EX`;
       lines.push(
-        index === 0
-          ? `${label}EX\tgoto 9999:%=27!(%=140)`
-          : `${label}EX\tgoto 9999:%=27,${previous}:%=140`
+        !previousEntry
+          ? `${exitLabel}\tgoto 9999:%=27!(%=140)`
+          : `${exitLabel}\tgoto 9999:%=27,${previous}:%=140`
       );
       lines.push("\t;");
       lines.push(`\tif '$$Valcp${label}() goto ${label}`);
       lines.push("\t;");
 
-      if (app.fields.isMultiSelect(field)) {
+      const afterField = renderFieldCode(field.afterFieldCode, field, label, config);
+      if (afterField.length) {
+        afterField.forEach((line) => lines.push(line.trim() === ";" ? "\t;" : `\t${line}`));
+        lines.push("\t;");
+      }
+
+      if (app.fields.isMultiSelect(field) && !isList) {
         const tableVariable = app.fields.multiSelectTableVariable(field);
         const includeLabel = label + 25;
 
@@ -1564,6 +1808,13 @@
       const reference = app.fields.isMultiSelect(field)
         ? app.fields.multiSelectInputVariable(field)
         : u.normalizeVariable(field.variable);
+
+      if (app.fields.isListMultiSelect(field)) {
+        const tableVariable = app.fields.multiSelectTableVariable(field);
+        const selectedText = u.escapeMac(field.multiSelectSelectedText || "Selecionados");
+        lines.push(`\tdo Set^%CSW1UTI(%PRG,"cp${label}MM1",$select($data(${tableVariable}):"${selectedText}",1:"${listEmptyText(field, config)}"))`);
+        return;
+      }
 
       if (app.fields.isMultiSelect(field)) {
         const tableVariable = app.fields.multiSelectTableVariable(field);
@@ -1617,6 +1868,20 @@
       lines.push(`\t; Método Valcp${label}()`);
       lines.push(`Valcp${label}()\t;`);
 
+      if (app.fields.isListMultiSelect(field)) {
+        const tableVariable = app.fields.multiSelectTableVariable(field);
+        const selectedText = u.escapeMac(field.multiSelectSelectedText || "Selecionados");
+        if (field.required) {
+          lines.push(`\tif '$data(${tableVariable}) do ME^%CSUTIUD("${u.escapeMac(field.description)}: Campo obrigatório!") quit 0`);
+          lines.push("\t;");
+        }
+        lines.push(`\tdo Set^%CSW1UTI(%PRG,"cp${label}MM1",$select($data(${tableVariable}):"${selectedText}",1:"${listEmptyText(field, config)}"))`);
+        lines.push("\t;");
+        lines.push("\tquit $$$OK");
+        lines.push("\t;");
+        return;
+      }
+
       if (field.required && !app.fields.isMultiSelect(field)) {
         lines.push(`\tif ${reference}="" do ME^%CSUTIUD("${u.escapeMac(field.description)}: Campo obrigatório!") quit 0`);
         lines.push("\t;");
@@ -1637,8 +1902,9 @@
 
     lines.push("\t; Método Validate()");
     lines.push("Validate()\t;");
-    entries.forEach(({ label }) => {
-      lines.push(`\tif '$$Valcp${label}() do Focus^%CSW1UTI(%PRG,"cp${label}") quit 0`);
+    entries.forEach(({ field, label }) => {
+      const control = app.fields.isListMultiSelect(field) ? `cp${label}MM1` : `cp${label}`;
+      lines.push(`\tif '$$Valcp${label}() do Focus^%CSW1UTI(%PRG,"${control}") quit 0`);
     });
     lines.push("\t;");
     lines.push("\tquit $$$OK");
@@ -1650,6 +1916,127 @@
       .map(({ field }) => field)
       .filter((field) => app.fields.usesOptions(field))
       .map((field) => u.normalizeVariable(field.optionsVariable, app.fields.defaultOptions(field)));
+  }
+
+  function dependentDisplayColumns(column) {
+    const variableOf = (item) => u.normalizeVariable(item.variable, "").toLowerCase();
+    const own = variableOf(column);
+    if (!own) return [];
+
+    const byVariable = new Map(
+      state.gridColumns.map((item, index) => [variableOf(item), index + 1])
+    );
+
+    return state.gridColumns
+      .map((item, index) => ({ item, position: index + 1 }))
+      .filter(({ item }) =>
+        item.displayOnly === true &&
+        String(item.displayExpression || "").trim() &&
+        new RegExp(`\\b${own}\\b`).test(item.displayExpression)
+      )
+      .map(({ item, position }) => ({
+        position,
+        expression: String(item.displayExpression)
+          .replace(/\bcodEmpresa\b/g, "CE")
+          .replace(/\b([a-z][a-z0-9]*)\b/g, (word) =>
+            byVariable.has(word) ? `$piece(VARDET,Z,${byVariable.get(word)})` : word
+          )
+      }));
+  }
+
+  function clickableColumns() {
+    return state.gridColumns
+      .map((column, index) => ({ column, position: index + 1 }))
+      .filter(({ column }) => String(column.clickLabel || "").trim())
+      .map(({ column, position }) => ({
+        position,
+        label: String(column.clickLabel).trim(),
+        title: String(column.title || ""),
+        menu: Array.isArray(column.actionMenu) ? column.actionMenu : []
+      }));
+  }
+
+  function tabHooks(config) {
+    const tab = state.tabs.find((item) => item.id === config.gridLocationId);
+    return (tab && tab.hooks && typeof tab.hooks === "object") ? tab.hooks : {};
+  }
+
+  function sessionCompanyLoad(config) {
+    return !config.gridInTab &&
+      app.indexes.usesRoutineCompany(config) &&
+      !state.fields.some((field) => u.normalizeVariable(field.variable, "") === "CODEMP");
+  }
+
+  function viewOnlyTab(config) {
+    return Boolean(config.gridInTab) && ((app.state && app.state.ruleHooks) || {}).openByKey === true;
+  }
+
+  function actionMenuColumns() {
+    return clickableColumns().filter(({ menu }) => menu.length);
+  }
+
+  function actionMenuVariables({ position }) {
+    return { options: `OPCOES${position}`, table: `TABOPC${position}`, method: `ObterMenuOpcoes${position}` };
+  }
+
+  function appendActionMenuInitializers(lines, config) {
+    actionMenuColumns().forEach((column) => {
+      const { options, table, method } = actionMenuVariables(column);
+      lines.push(`\tset sc=$$${method}^${config.rgRoutineName}(.${options},.${table})`);
+      lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit");
+      lines.push("\t;");
+    });
+  }
+
+  function appendActionMenuMethods(lines, config) {
+    actionMenuColumns().forEach((column) => {
+      const { method } = actionMenuVariables(column);
+      lines.push(`\t; Obter Menu de Opções da coluna ${u.sanitize(column.title)}`);
+      lines.push(`${method}(strOpcoes,tabOpcoes)\t;`);
+      lines.push("\t$$$VAR");
+      lines.push("\tnew sc");
+      lines.push("\t;");
+      lines.push("\tset strOpcoes=\"\"");
+      lines.push("\t;");
+      lines.push("\tkill tabOpcoes");
+      lines.push("\t;");
+      column.menu.forEach((item) => {
+        lines.push(`\tset sc=$$AdicionarOpcaoAcoes^CCUTIRG011("${u.escapeMac(item.text)}","${item.label}-${config.routineName}",,.strOpcoes,.tabOpcoes)`);
+      });
+      lines.push("\t;");
+      lines.push("\tquit $$$OK");
+      lines.push("\t;");
+    });
+  }
+
+  function appendActionMenuLabels(lines, config, focusLabel) {
+    actionMenuColumns().forEach((column) => {
+      const { options, table } = actionMenuVariables(column);
+      const label = column.label;
+      lines.push(`\t; ${u.sanitize(column.title)}`);
+      lines.push("\t;");
+      lines.push(`${label}\tdo ^%CSW1MENUCLICK(${options},"OPCLICK","${label}EX^${config.routineName}")`);
+      lines.push("\tquit:$$CSP^%CSW1UTI()");
+      lines.push("\t;");
+      lines.push(`${label}EX\tset sc=$$ObterDirecaoOpcaoAcoes^CCUTIRG011(.${table},OPCLICK,.LABROT,.FLGCHA)`);
+      lines.push(`\tif $$$ISERR(sc) goto ${label}EX1`);
+      lines.push("\t;");
+      lines.push(`\tif LABROT=""!(FLGCHA'=1) goto ${label}EX1`);
+      lines.push("\t;");
+      lines.push("\tgoto @LABROT");
+      lines.push("\t;");
+      lines.push(`${label}EX1\tgoto ${focusLabel}`);
+      lines.push("\t;");
+    });
+  }
+
+  function editFlowColumns(config) {
+    const columns = maintenanceColumns();
+    const key = recordKeyDefinition();
+    if (key && autoSequenceMode(config) === "auto" && !columns.some(({ column }) => column.id === key.column.id)) {
+      columns.unshift({ column: key.column, piece: key.piece });
+    }
+    return columns;
   }
 
   function maintenanceColumns() {
@@ -1718,7 +2105,7 @@
     const type = maintenanceType(column);
 
     if (type === "combo") {
-      return `$get(${maintenanceTable(column)}(${reference}))`;
+      return `$select(${reference}="":"",1:$get(${maintenanceTable(column)}(${reference})))`;
     }
 
     const expression = String(column.displayExpression || "").trim();
@@ -1731,7 +2118,7 @@
     const required = column.required ? 1 : "";
     const cp = `cp${label}`;
     const inlineSuffix = `,,,,,,0,3,3,${config.gridCode}`;
-    const tail = `,,"${controlDefinition(column.f7Routine, cp, inlineSuffix)}")`;
+    const tail = `,,"${controlDefinition(column.f7Routine, cp, inlineSuffix, column.f8Routine)}")`;
     const type = maintenanceType(column);
 
     if (type === "integer") {
@@ -2051,6 +2438,9 @@
       ...optionVariables(config)
     ]);
 
+    const dynamicColumns = dynamicColumnsOf(config);
+    if (dynamicColumns) ["COLDIN", "SEQDIN", dynamicColumns.table].forEach((variable) => vars.add(variable));
+
     workGlobalContextArguments(config).forEach((argument) => {
       const clean = String(argument || "").trim();
       if (/^[A-Za-z%][A-Za-z0-9%]*$/.test(clean)) {
@@ -2067,6 +2457,9 @@
         vars.add(app.fields.multiSelectTableVariable(field));
         vars.add("SN");
       }
+      if (app.fields.isListMultiSelect(field)) {
+        vars.add(app.fields.multiSelectOptionsVariable(field));
+      }
     });
 
     state.gridColumns.forEach((column) => {
@@ -2076,9 +2469,21 @@
     if (hasCheckColumns()) {
       ["CHECK", "CODCOL", "CODGRID", "TABERRO"].forEach((variable) => vars.add(variable));
     }
+    if (clickableColumns().length || String((config.gridInTab ? tabHooks(config) : ((app.state && app.state.ruleHooks) || {})).cellClickCode || "").trim()) {
+      ["CODCOL", "CODGRID"].forEach((variable) => vars.add(variable));
+    }
+    if (actionMenuColumns().length) {
+      ["OPCLICK", "LABROT", "FLGCHA"].forEach((variable) => vars.add(variable));
+      actionMenuColumns().forEach((column) => {
+        const { options, table } = actionMenuVariables(column);
+        vars.add(options);
+        vars.add(table);
+      });
+    }
 
     if (config.gridMaintenance) {
       ["CODLIN", "CODREG", "FLGMANUT", "VARDET", workVariable(config)].forEach((variable) => vars.add(variable));
+      if (autoSequenceMode(config) === "editavel") vars.add("CHVANT");
       if (config.gridAllowRemove) vars.add("SN");
       maintenanceColumns().forEach(({ column }) => {
         if (maintenanceType(column) === "combo") vars.add(maintenanceTable(column));
@@ -2246,6 +2651,19 @@
       lines.push("\t;");
       lines.push(`\tset sc=$$ExcluirLinha^%CSW1GRID2(CT,%PRG,${config.gridCode},,,,CODREG)`);
       lines.push("\t;");
+
+      if (config.gridInlineSaveOnConfirm && config.useRules && config.generateSave) {
+        const removeSaveArgs = [...new Set([
+          ...app.indexes.macArguments(),
+          ...gridTabKeyDefinitions(config).map((definition) => definition.variable),
+          ...workContextArguments
+        ])];
+
+        lines.push(`\tset sc=$$Gravar${config.entityName}^${config.rgRoutineName}(${removeSaveArgs.join(",")})`);
+        lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 2999");
+        lines.push("\t;");
+      }
+
       lines.push("\tgoto 2999");
       lines.push("\t;");
     }
@@ -2266,6 +2684,10 @@
     lines.push(`4000\tset sc=$$ObterDadosLinha^%CSW1GRID(CT,%PRG,${config.gridCode},,.VARDET,.CODLIN,.CODREG)`);
     lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 4999");
     lines.push("\t;");
+    if (autoSequenceMode(config) === "editavel") {
+      lines.push(`\tset CHVANT=$select(FLGMANUT:$piece(VARDET,Z,${key.piece}),1:"")`);
+      lines.push("\t;");
+    }
     lines.push(`\tset ${mtemp}=""`);
     lines.push("\tif FLGMANUT do");
     lines.push(`\t. set sc=$$ObterGlobalTrabalho^${config.rgRoutineName}(${workContextPrefix}$piece(VARDET,Z,${key.piece}),.${mtemp})`);
@@ -2286,10 +2708,15 @@
     });
     lines.push("\t;");
 
-    const editColumns = maintenanceColumns();
+    const editColumns = editFlowColumns(config);
     editColumns.forEach(({ column, piece }, editIndex) => {
       const label = 4100 + editIndex * 100;
-      const previousLabel = editIndex === 0 ? "4999" : 4100 + (editIndex - 1) * 100;
+      const previousIsAutoKey =
+        editIndex > 0 &&
+        autoSequenceMode(config) === "auto" &&
+        key &&
+        editColumns[editIndex - 1].column.id === key.column.id;
+      const previousLabel = editIndex === 0 || previousIsAutoKey ? "4999" : 4100 + (editIndex - 1) * 100;
       const nextLabel = editIndex === editColumns.length - 1 ? "4900" : 4100 + (editIndex + 1) * 100;
       const reference = maintenanceReference(piece);
       const type = maintenanceType(column);
@@ -2297,7 +2724,20 @@
       lines.push(`\t; ${u.sanitize(column.title)}`);
       lines.push(`${label}\t;`);
 
-      if (column.lockOnEdit) {
+      const sequenceMode = key && column.id === key.column.id ? autoSequenceMode(config) : "";
+      const nextSequence = `$$ProximaSequencia^${config.rgRoutineName}(${workContextPrefix.replace(/,$/, "")})`;
+
+      if (sequenceMode === "auto") {
+        lines.push(`${label}ON\tif 'FLGMANUT,${reference}="" set ${reference}=${nextSequence}`);
+        lines.push(`\tdo TbSet^%CSW1UTI(CODLIN,${piece},${reference},,,,,${config.gridCode})`);
+        lines.push(`\tgoto ${nextLabel}`);
+        lines.push("\t;");
+        return;
+      }
+
+      if (sequenceMode === "editavel") {
+        lines.push(`${label}ON\tif 'FLGMANUT,${reference}="" set ${reference}=${nextSequence}`);
+      } else if (column.lockOnEdit) {
         lines.push(`${label}ON\tif %=140,FLGMANUT goto 4999`);
         lines.push(`\tif FLGMANUT goto ${nextLabel}`);
       } else {
@@ -2307,7 +2747,7 @@
       if (type === "combo") {
         const table = maintenanceTable(column);
         lines.push(`\tdo InicializaCombo^%CSW1A("cp${label}",.${table},0,${reference},,,1)`);
-        lines.push(`\tdo TbSet^%CSW1UTI(CODLIN,${piece},$get(${table}(${reference})),,,,,${config.gridCode})`);
+        lines.push(`\tdo TbSet^%CSW1UTI(CODLIN,${piece},$select(${reference}="":"",1:$get(${table}(${reference}))),,,,,${config.gridCode})`);
         lines.push("\t;");
       }
 
@@ -2332,12 +2772,51 @@
     lines.push("\t;");
     lines.push(`\tif $piece(VARDET,Z,${key.piece})="" do ME^%CSUTIUD("${u.escapeMac(key.column.title)}: Campo obrigatório!") goto ${firstMaintenanceLabel}`);
     lines.push("\t;");
+    if (autoSequenceMode(config) === "editavel") {
+      lines.push(`\tset sc=$$ReordenarGlobalTrabalho^${config.rgRoutineName}(${workContextPrefix}CHVANT,$piece(VARDET,Z,${key.piece}))`);
+      lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 4999");
+      lines.push("\t;");
+    }
     lines.push(`\tset sc=$$GravarGlobalTrabalho^${config.rgRoutineName}(${workContextPrefix}$piece(VARDET,Z,${key.piece}),${mtemp})`);
     lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 4999");
     lines.push("\t;");
+    if (autoSequenceMode(config) === "editavel") {
+      lines.push(`\tset sc=$$Limpar^%CSW1GRID(CT,%PRG,${config.gridCode})`);
+      lines.push(`\tset sc=$$GerarGrid^${config.rgRoutineName}(${joinCallArguments([...gridContextArguments, "%PRG"])})`);
+      lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 4999");
+      lines.push("\t;");
+      lines.push("\tif FLGMANUT goto 4999");
+      if (config.gridAllowInsert) {
+        lines.push(`\tset sc=$$IncluirLinha^%CSW1GRID2(CT,%PRG,${config.gridCode})`);
+        lines.push("\tif $$$ISERR(sc) goto 4999");
+        lines.push(`\tset sc=$$ModoManutencao^%CSW1GRID(CT,%PRG,${config.gridCode},1,1)`);
+        lines.push("\tset FLGMANUT=0");
+        lines.push("\t;");
+        lines.push("\tgoto 4000");
+      } else {
+        lines.push("\tgoto 4999");
+      }
+      lines.push("\t;");
+      lines.push("\t; Encerrar Manutenção");
+      appendMaintenanceEnd(lines, config);
+      return;
+    }
     lines.push(`\tset sc=$$GravarGrid^${config.rgRoutineName}(${joinCallArguments([...gridContextArguments, "%PRG", `$piece(VARDET,Z,${key.piece})`, "CODREG"])})`);
     lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 4999");
     lines.push("\t;");
+
+    if (config.gridInlineSaveOnConfirm && config.useRules && config.generateSave) {
+      const confirmSaveArgs = [...new Set([
+        ...app.indexes.macArguments(),
+        ...gridTabKeyDefinitions(config).map((definition) => definition.variable),
+        ...workContextArguments
+      ])];
+
+      lines.push(`\tset sc=$$Gravar${config.entityName}^${config.rgRoutineName}(${confirmSaveArgs.join(",")})`);
+      lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 4999");
+      lines.push("\t;");
+    }
+
     lines.push(`\tset sc=$$AtualizarLinhaGrid^%CSW1GRID2(CT,%PRG,${config.gridCode},,CODREG,,,,,1)`);
     lines.push("\t;");
     lines.push(`\tif FLGMANUT set sc=$$Movimentar^%CSW1GRID(CT,%PRG,${config.gridCode},141)`);
@@ -2352,6 +2831,10 @@
     lines.push("\t;");
 
     lines.push("\t; Encerrar Manutenção");
+    appendMaintenanceEnd(lines, config);
+  }
+
+  function appendMaintenanceEnd(lines, config) {
     lines.push(`4999\tset sc=$$ModoManutencao^%CSW1GRID(CT,%PRG,${config.gridCode},0,0)`);
     lines.push(`\tset sc=$$AtualizarLinhaGrid^%CSW1GRID2(CT,%PRG,${config.gridCode},CODLIN,CODREG,,,,,1)`);
     lines.push("\t;");
@@ -2391,7 +2874,7 @@
 
     const key = recordKeyDefinition();
 
-    maintenanceColumns().forEach(({ column, piece }, index) => {
+    editFlowColumns(config).forEach(({ column, piece }, index) => {
       const label = 4100 + index * 100;
       const reference = maintenanceReference(piece);
       const display = maintenanceDisplay(column, piece);
@@ -2411,12 +2894,16 @@
           lines.push(line === ";" ? "\t;" : `\t${line}`);
         });
         lines.push("\t;");
-      } else {
-        lines.push(`\tdo TbSet^%CSW1UTI(CODLIN,${piece},${display},,,,,${config.gridCode})`);
-        lines.push("\t;");
       }
 
-      if (key && column.id === key.column.id) {
+      lines.push(`\tdo TbSet^%CSW1UTI(CODLIN,${piece},${display},,,,,${config.gridCode})`);
+
+      dependentDisplayColumns(column).forEach(({ position, expression }) => {
+        lines.push(`\tdo TbSet^%CSW1UTI(CODLIN,${position},${expression},,,,,${config.gridCode})`);
+      });
+      lines.push("\t;");
+
+      if (key && column.id === key.column.id && !autoSequenceMode(config)) {
         lines.push(`\tif '$get(FLGMANUT),$$ExisteGlobalTrabalho^${config.rgRoutineName}(CT,${reference}) do ME^%CSUTIUD("${u.escapeMac(column.title)} "_${reference}_" já informado!") quit 0`);
         lines.push("\t;");
       }
@@ -2441,7 +2928,10 @@
     const vars = routineVariables(config);
     const filterDefs = filterDefinitions(config);
     const localFilterDefs = filterDefs.filter((definition) => !definition.inherited);
-    const filterVars = localFilterDefs.map((definition) => definition.variable);
+    const entryParameterNames = new Set(entryParametersOf().map((item) => item.toUpperCase()));
+    const filterVars = localFilterDefs
+      .map((definition) => definition.variable)
+      .filter((variable) => config.gridInTab || !entryParameterNames.has(String(variable).toUpperCase()));
     const multiTableVars = fields(config)
       .map(({ field }) => field)
       .filter((field) => app.fields.isMultiSelect(field))
@@ -2454,8 +2944,12 @@
     const workContextCall = joinCallArguments(workContextArguments);
     const workContextPrefix = workContextCall ? `${workContextCall},` : "";
     const cleanupArguments = cleanupContextArguments(config);
+    const persistentArgumentList =
+      config.gridMaintenance && recordKeyDefinition() ? app.indexes.macArguments(config) : [];
     const contextArgumentSet = new Set(
-      cleanupArguments.map((argument) => String(argument || "").replace(/^\./, "").toUpperCase())
+      [...cleanupArguments, ...persistentArgumentList].map((argument) =>
+        String(argument || "").replace(/^\./, "").toUpperCase()
+      )
     );
     const allFilterArgs = [
       ...filterDefs
@@ -2463,15 +2957,24 @@
         .filter((variable) => !contextArgumentSet.has(String(variable || "").toUpperCase())),
       ...multiTableVars
         .map((variable) => `.${variable}`)
-        .filter((variable) => !contextArgumentSet.has(String(variable || "").replace(/^\./, "").toUpperCase()))
+        .filter((variable) => !contextArgumentSet.has(String(variable || "").replace(/^\./, "").toUpperCase())),
+      ...entryLoadParameters(config).map((item) => item.variable)
     ];
     const filterArgs = allFilterArgs.length ? `,${allFilterArgs.join(",")}` : "";
     const cleanupCall = joinCallArguments(cleanupArguments);
     const cleanupPrefix = cleanupCall ? `${cleanupCall},` : "";
     const gridContextArguments = gridMethodContextArguments(config);
 
+    const entryParameters = !config.gridInTab ? entryParametersOf() : [];
+    const entryParameterSet = new Set(entryParameters.map((item) => item.toUpperCase()));
+    if (entryParameterSet.size) {
+      for (let index = vars.length - 1; index >= 0; index -= 1) {
+        if (entryParameterSet.has(String(vars[index]).toUpperCase())) vars.splice(index, 1);
+      }
+    }
+
     lines.push(`ROUTINE ${config.routineName}`);
-    lines.push(`${config.routineName}\t; ${month}/${year} - ${u.escapeMac(config.title)} <#ROTINA GERADA AUTOMATICAMENTE#>`);
+    lines.push(`${config.routineName}${entryParameters.length ? `(${entryParameters.join(",")})` : ""}\t; ${month}/${year} - ${u.escapeMac(config.title)} <#ROTINA GERADA AUTOMATICAMENTE#>`);
     lines.push("\t;");
     lines.push("\t#include %CSUTICSP");
     lines.push("\t;");
@@ -2486,9 +2989,22 @@
       appendGeneratedGridOptionTableInitializers(lines, config);
       if (config.gridMaintenance) appendMaintenanceTableInitializers(lines, config);
       appendColumnInitializers(lines, config);
+      appendListOptionLoads(lines, config);
+      appendActionMenuInitializers(lines, config);
 
       if (filterVars.length) {
         lines.push(`\tset (${filterVars.join(",")})=""`);
+      }
+
+      const savedFields = savedFieldDefinitions(config);
+      if (savedFields.length && config.gridMaintenance && config.generateSave) {
+        lines.push(
+          `\tset sc=$$ObterDados${config.entityName}^${config.rgRoutineName}(${[
+            ...app.indexes.macArguments(),
+            ...gridTabKeyDefinitions(config).map((definition) => definition.variable),
+            ...savedFields.map((definition) => `.${definition.variable}`)
+          ].join(",")})`
+        );
       }
       multiTableVars.forEach((variable) => lines.push(`\tkill ${variable}`));
       if (checkDefs.length) {
@@ -2504,7 +3020,7 @@
       lines.push("\t;");
       lines.push("\tdo 9000,8000");
       lines.push("\t;");
-      lines.push(`\tgoto ${firstLabel}`);
+      lines.push(`\tgoto ${config.gridTab && config.gridTab.gridFirst === true && fields(config).length ? "2000" : firstLabel}`);
       lines.push("\t;");
     } else {
       lines.push(`0000\tdo New^%CSW1UTI("${vars.join(",")}")`);
@@ -2534,6 +3050,8 @@
       appendGeneratedGridOptionTableInitializers(lines, config);
       if (config.gridMaintenance) appendMaintenanceTableInitializers(lines, config);
       appendColumnInitializers(lines, config);
+      appendListOptionLoads(lines, config);
+      appendActionMenuInitializers(lines, config);
 
       lines.push(`\t; csw:aj:${config.windowWidth},${config.windowHeight},${u.escapeMac(config.title)}`);
       lines.push(`\tdo AJ^%CSUTIUD(${config.windowWidth},${config.windowHeight},"${u.escapeMac(config.title)}")`);
@@ -2564,25 +3082,44 @@
 
     appendFields(lines, config);
 
+    const enableAfterConsult = app.customButtons && typeof app.customButtons.buttonsForLocation === "function"
+      ? app.customButtons.buttonsForLocation(config.gridLocationId || "parent").filter((button) => button.initialState === 0)
+      : [];
+
     lines.push("\t; Gerar Grid");
     lines.push("2000\tif '$$Validate() quit");
     lines.push("\t;");
     lines.push(`\tset sc=$$Limpar^%CSW1GRID(CT,%PRG,${config.gridCode})`);
     lines.push("\t;");
-    lines.push(`\tdo AG^%CSUTIUD(,"2000AG1^${config.routineName}")`);
-    lines.push("\tquit:$$CSP^%CSW1UTI()");
-    lines.push("\t;");
+    if (enableAfterConsult.length) {
+      enableAfterConsult.forEach((button) => {
+        lines.push(`\tdo HabBotGeral^%CSW1("${u.escapeMac(button.buttonId)}",0)`);
+      });
+      lines.push("\t;");
+    }
     // Os argumentos do índice acompanham a assinatura da RG.
     const persistentArgs =
       config.gridMaintenance && recordKeyDefinition()
         ? app.indexes.macArguments(config)
-        : [];
+        : (sessionCompanyLoad(config) ? ["CE"] : []);
     const persistentPrefix = persistentArgs.length ? `${persistentArgs.join(",")},` : "";
 
+    const dynamicColumns = dynamicColumnsOf(config);
+    if (dynamicColumns) {
+      lines.push("\t; Colunas conforme os filtros");
+      lines.push(`\tkill ${dynamicColumns.table}`);
+      dynamicColumns.load.split(/\r?\n/).filter((line) => line.trim()).forEach((line) => {
+        lines.push(`\t${line.trim().split("{table}").join(dynamicColumns.table)}`);
+      });
+      lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 2000EX");
+      lines.push("\tdo 9050");
+      lines.push("\t;");
+    }
+
     lines.push(
-      `2000AG1\tset sc=$$GerarGlobalTrabalho^${config.rgRoutineName}(${persistentPrefix}${cleanupPrefix}%PRG${filterArgs})`
+      `\tset sc=$$GerarGlobalTrabalho^${config.rgRoutineName}(${persistentPrefix}${cleanupPrefix}%PRG${filterArgs})`
     );
-    lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 2000AGEX");
+    lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 2000EX");
     lines.push("\t;");
 
     if (config.gridInTab && config.gridMaintenance && config.generateSave) {
@@ -2593,17 +3130,23 @@
     lines.push(`\tset sc=$$GerarGrid^${config.rgRoutineName}(${joinCallArguments([...gridContextArguments, "%PRG"])})`);
     lines.push("\tif $$$ISERR(sc) do ME^%CSUTICSP(sc)");
     lines.push("\t;");
-    lines.push("2000AGEX\tdo FJ^%CSUTIUD");
-    lines.push("\tdo FJAG^%CSW1UTI");
+    if (enableAfterConsult.length) {
+      enableAfterConsult.forEach((button) => {
+        lines.push(`\tif $$$ISOK(sc) do HabBotGeral^%CSW1("${u.escapeMac(button.buttonId)}",1)`);
+      });
+      lines.push("\t;");
+    }
+    lines.push("2000EX\t;");
     lines.push("\t;");
 
     if (config.gridMaintenance && maintenanceColumns().length) {
-      lines.push(`\tdo BtnManut^%CSW1D(1,${config.gridCode})`);
+      lines.push(`\t${viewOnlyTab(config) ? "if '$get(DISABLE) " : ""}do BtnManut^%CSW1D(1,${config.gridCode})`);
       lines.push("\t;");
     }
 
+    const afterGridLabel = config.gridTab && config.gridTab.gridFirst === true && fields(config).length ? "1000" : focusLabel;
     lines.push(`\tset sc=$$ValidarDisplay^%CSW1GRID(CT,%PRG,${config.gridCode})`);
-    lines.push(`\tif $$$ISERR(sc) goto ${focusLabel}`);
+    lines.push(`\tif $$$ISERR(sc) goto ${afterGridLabel}`);
     lines.push("\t;");
     lines.push(`\tset sc=$$Movimentar^%CSW1GRID(CT,%PRG,${config.gridCode},,1)`);
     lines.push("\t;");
@@ -2613,7 +3156,7 @@
       lines.push("\t;");
     }
 
-    lines.push(`\tgoto ${focusLabel}`);
+    lines.push(`\tgoto ${afterGridLabel}`);
     lines.push("\t;");
     lines.push("\t; Foco final");
     const finalFocusMode = gridFinalFocusMode(config);
@@ -2621,6 +3164,10 @@
 
     if (finalFocusMode === "save") {
       lines.push(`${focusLabel}\tdo Focus^%CSW1UTI(%PRG,"${gridSaveButtonId(config)}",,1) quit`);
+    } else if (finalFocusMode === "consult") {
+      lines.push(`${focusLabel}\tdo Focus^%CSW1UTI(%PRG,"btConsultar",,1) quit`);
+    } else if (finalFocusMode.startsWith("campo:")) {
+      lines.push(`${focusLabel}\tdo Focus^%CSW1UTI(%PRG,"cp${finalFocusMode.slice(6)}",,1) quit`);
     } else if (finalFocusMode === "lastField" && gridFields.length) {
       lines.push(`${focusLabel}\tdo Focus^%CSW1UTI(%PRG,"cp${gridFields.at(-1).label}",,1) quit`);
     } else if (checkDefs.length) {
@@ -2656,13 +3203,24 @@
       );
     }
 
+    const interfaceCode = config.gridInTab
+      ? tabHooks(config).interfaceCode
+      : ((app.state && app.state.ruleHooks) || {}).interfaceCode;
+    appendActionMenuLabels(lines, config, config.gridMaintenance ? "2999" : "3000");
+
+    if (app.mac && typeof app.mac.appendListF7Labels === "function") {
+      app.mac.appendListF7Labels(lines, config.gridLocationId || "parent", config.routineName);
+    }
+
+    lines.push(...u.renderHookLines(interfaceCode));
+
     lines.push("\t; Montar Tela");
     lines.push("9000\tdo Clear^%CSW1UTI()");
     lines.push("\tdo Enable^%CSW1UTI()");
     lines.push("\t;");
 
     if (!config.gridInTab && config.routineMode === "grid" && config.gridUseConsultButton !== false) {
-      lines.push("\tdo BtnConsultar^%CSW1D(0)");
+      lines.push("\tdo BtnConsultar^%CSW1D(1)");
       lines.push("\t;");
     }
 
@@ -2677,11 +3235,29 @@
       lines.push("\t;");
     }
 
+    const conditionalControls = fields(config)
+      .filter(({ field }) => field.disabled !== true && String(field.enabledWhen || "").trim());
+    conditionalControls.forEach(({ field, label }) => {
+      lines.push(`\tif '(${String(field.enabledWhen).trim()}) do DisableCp^%CSW1UTI("cp${label}")`);
+    });
+    if (conditionalControls.length) lines.push("\t;");
+
     if (app.customButtons) {
       app.customButtons.appendInitializers(
         lines,
         config.gridLocationId || "parent"
       );
+    }
+
+    if (viewOnlyTab(config)) {
+      lines.push("\tif $get(DISABLE) do Disable^%CSW1UTI()");
+      if (app.customButtons) {
+        app.customButtons.buttonsForLocation(config.gridLocationId).forEach((button, index) => {
+          const id = String(button.buttonId || `btPersonalizado${index + 1}`);
+          lines.push(`\tif $get(DISABLE) do HabBotGeral^%CSW1("${u.escapeMac(id)}",0)`);
+        });
+      }
+      lines.push("\t;");
     }
 
     if (config.gridMaintenance && maintenanceColumns().length) {
@@ -2690,25 +3266,56 @@
       lines.push("\t;");
     }
 
+    const dynamicGrid = dynamicColumnsOf(config);
+    if (dynamicGrid) {
+      lines.push(`\tkill ${dynamicGrid.table}`);
+      lines.push("\tdo 9050");
+      lines.push("\t;");
+      if (config.gridInTab) lines.push(...u.renderHookLines(tabHooks(config).screenCode));
+      lines.push("\tquit");
+      lines.push("\t;");
+      lines.push("\t; Montar o grid (colunas fixas + dinâmicas)");
+      lines.push("9050\t;");
+    }
     lines.push(`\tkill TABGRID(${config.gridCode})`);
     lines.push("\t;");
-    lines.push(`\tset TABGRID(${config.gridCode})="; csw:gridConf:cod=${config.gridCode}; LinPos=${config.gridLinePosition}; Altura=${config.gridHeight}; LinIni=${config.gridLineStart}; LinFim=${config.gridLineEnd}; HabilitaNavegacao=${config.gridNavigation}; LabelEdit=${config.gridEditLabel}^${config.routineName};"`);
+    const columnPlacement = Number(config.gridColumnPosition) > 0
+      ? ` ColPos=${Number(config.gridColumnPosition)};${Number(config.gridTableWidth) > 0 ? ` TamTab=${Number(config.gridTableWidth)};` : ""}`
+      : "";
+    lines.push(`\tset TABGRID(${config.gridCode})="; csw:gridConf:cod=${config.gridCode}; LinPos=${config.gridLinePosition}; Altura=${config.gridHeight}; LinIni=${config.gridLineStart}; LinFim=${config.gridLineEnd};${columnPlacement} HabilitaNavegacao=${config.gridNavigation}; LabelEdit=${config.gridEditLabel}^${config.routineName};"`);
 
     state.gridColumns.forEach((column, index) => {
       const piece = index + 1;
       if (isCheckColumn(column)) {
-        lines.push(`\tset TABGRID(${config.gridCode},${piece})="; csw:gridCols:cod=${config.gridCode}; Tipo=checkheader; Csw=${column.width}^${u.escapeMac(column.title)}^${piece};"`);
+        lines.push(`\tset TABGRID(${config.gridCode},${piece})="; csw:gridCols:cod=${config.gridCode}; Tipo=checkheader; Csw=${column.width}^${u.escapeMac(column.title)};"`);
         return;
       }
-      const staticSuffix = config.gridMaintenance && column.editable ? "^^^1" : "";
-      lines.push(`\tset TABGRID(${config.gridCode},${piece})="; csw:gridCols:cod=${config.gridCode}; Tipo=${column.type}; Csw=${column.width}^${u.escapeMac(column.title)}^${piece}${staticSuffix}; List=^^${piece}; Csv=^${u.escapeMac(column.title)};"`);
+      if (String(column.clickLabel || "").trim()) {
+        lines.push(`\tset TABGRID(${config.gridCode},${piece})="; csw:gridCols:cod=${config.gridCode}; Tipo=${column.type}; Csw=${column.width}^${u.escapeMac(column.title)}^^^^1^^1;"`);
+        return;
+      }
+      const staticSuffix = config.gridMaintenance && column.editable ? "^^^^1" : "";
+      lines.push(`\tset TABGRID(${config.gridCode},${piece})="; csw:gridCols:cod=${config.gridCode}; Tipo=${column.type}; Csw=${column.width}^${u.escapeMac(column.title)}${staticSuffix};"`);
     });
 
     lines.push("\t;");
-    lines.push(`\tset sc=$$Inicializar^%CSW1GRID(CT,%PRG,${config.gridCode},.TABGRID)`);
-    lines.push("\t;");
-    lines.push("\tquit");
-    lines.push("\t;");
+    if (dynamicGrid) {
+      const base = state.gridColumns.length;
+      lines.push(`\tset COLDIN=${base},SEQDIN=""`);
+      lines.push(`\tfor  set SEQDIN=$order(${dynamicGrid.table}(SEQDIN)) quit:SEQDIN=""  set COLDIN=COLDIN+1,TABGRID(${config.gridCode},COLDIN)="; csw:gridCols:cod=${config.gridCode}; Tipo="_$piece(${dynamicGrid.table}(SEQDIN),Z,1)_"; Csw="_$piece(${dynamicGrid.table}(SEQDIN),Z,2)_"^"_$piece(${dynamicGrid.table}(SEQDIN),Z,3)_";"`);
+      lines.push("\t;");
+      lines.push(`\tset sc=$$AtuConfGrid^%CSW1GRID2(CT,%PRG,${config.gridCode},.TABGRID)`);
+      lines.push(`\tset sc=$$Inicializar^%CSW1GRID(CT,%PRG,${config.gridCode},.TABGRID)`);
+      lines.push("\t;");
+      lines.push("\tquit");
+      lines.push("\t;");
+    } else {
+      lines.push(`\tset sc=$$Inicializar^%CSW1GRID(CT,%PRG,${config.gridCode},.TABGRID)`);
+      lines.push("\t;");
+      if (config.gridInTab) lines.push(...u.renderHookLines(tabHooks(config).screenCode));
+      lines.push("\tquit");
+      lines.push("\t;");
+    }
     lines.push("\t; Fim");
     lines.push(`9999\tset sc=$$ExcluirGlobalTrabalho^${config.rgRoutineName}(${cleanupCall})`);
     lines.push("\t;");
@@ -2739,7 +3346,7 @@
     appendValidations(lines, config);
     appendMaintenanceValidations(lines, config);
 
-    if (config.gridMaintenance && config.gridRowEnter) {
+    if (config.gridMaintenance && config.gridRowEnter && maintenanceColumns().length) {
       lines.push("\t; Evento Enter do Grid");
       lines.push("TbRowEnter(%cswTabela,%cswLin)\t;");
       lines.push(`\tset sc=$$ObterDadosLinha^%CSW1GRID(CT,%PRG,${config.gridCode})`);
@@ -2751,11 +3358,24 @@
 
     lines.push("\t; Método Click no Grid");
     lines.push(`${config.gridEditLabel}(%cswLin,%cswCol)\t;`);
-    if (checkDefs.length) {
+    const clickColumns = clickableColumns();
+    const cellClickCode = u.renderHookLines(
+      config.gridInTab ? tabHooks(config).cellClickCode : ((app.state && app.state.ruleHooks) || {}).cellClickCode
+    );
+    if (checkDefs.length || clickColumns.length || cellClickCode.length) {
       lines.push("\tset CODCOL=$piece(%cswCol,Y,1)");
       lines.push("\tset CODGRID=$piece(%cswCol,Y,2)");
       lines.push("\t;");
+    }
+    lines.push(...cellClickCode);
+    if (checkDefs.length) {
       lines.push(`\tif ${checkDefs.map(({ piece }) => `(CODCOL=${piece})`).join("!")} goto ${checkLabel}`);
+      lines.push("\t;");
+    }
+    if (clickColumns.length) {
+      clickColumns.forEach(({ position, label, title }) => {
+        lines.push(`\tif CODCOL=${position} goto ${label}\t; ${u.sanitize(title)}`);
+      });
       lines.push("\t;");
     }
     lines.push(`\tgoto ${focusLabel}`);
@@ -2770,14 +3390,7 @@
       lines.push("\tset CODGRID=%cswNumTab");
       lines.push("\tset CHECK=%cswChecked");
       lines.push("\t;");
-      lines.push(`\tdo AG^%CSUTIUD(,"TbHeaderClickAG1^${config.routineName}")`);
-      lines.push("\tquit:$$CSP^%CSW1UTI()");
-      lines.push("\t;");
-      lines.push("TbHeaderClickAG1\t;");
       lines.push("\tset sc=$$MarcaDesmarcaTodos^%CSW1GRIDCHECK(CT,%PRG,CHECK,CODGRID,CODCOL,1,.TABERRO)");
-      lines.push("\t;");
-      lines.push("\tdo FJ^%CSUTIUD");
-      lines.push("\tdo FJAG^%CSW1UTI");
       lines.push("\t;");
       lines.push("\tif $$$ISERR(sc) goto ERROSELECAO");
       lines.push("\t;");
@@ -2965,7 +3578,15 @@
       .map(({ field }) => field)
       .filter((field) => app.fields.isMultiSelect(field))
       .map((field) => u.toParameter(app.fields.multiSelectTableVariable(field)));
-    const allFilterParams = [...filterParams, ...multiTableParams];
+    const persistentParameterSet = new Set(
+      (config.gridMaintenance && recordKeyDefinition()
+        ? app.indexes.rgParameters(config)
+        : []
+      ).map((parameter) => String(parameter || "").toUpperCase())
+    );
+    const allFilterParams = [...filterParams, ...multiTableParams].filter(
+      (parameter) => !persistentParameterSet.has(String(parameter || "").toUpperCase())
+    ).concat(entryLoadParameters(config).map((item) => item.parameter));
     const filterArgs = allFilterParams.length ? `,${allFilterParams.join(",")}` : "";
     const columnVariables = uniqueColumnVariables();
     const key = recordKeyDefinition();
@@ -2995,22 +3616,65 @@
 
     appendGenerateTabsMethod(lines, config);
     appendGeneratedGridOptionTableMethods(lines);
+    appendActionMenuMethods(lines, config);
 
     if (config.gridMaintenance && config.generateSave) {
-      const saveParams = [...new Set([
+      const savedFields = savedFieldDefinitions(config);
+      const keyParams = [...new Set([
         ...app.indexes.rgParameters(),
-        ...tabKeyDefs.map((definition) => definition.parameter),
-        ...workContextParameters
+        ...tabKeyDefs.map((definition) => definition.parameter)
+      ])];
+      const saveParams = [...new Set([
+        ...keyParams,
+        ...workContextParameters,
+        ...savedFields.map((definition) => definition.parameter)
       ])];
       lines.push(`\t; Gravar ${u.sanitize(config.title)}`);
+      lines.push("\t;");
+      lines.push(`\t; set sc=$$Gravar${config.entityName}^${config.rgRoutineName}(${saveParams.join(",")})`);
       lines.push(`Gravar${config.entityName}(${saveParams.join(",")})\t;`);
       lines.push("\t$$$VAR");
-      lines.push("\tnew sc");
+      lines.push(savedFields.length ? "\tnew sc,dadosAba" : "\tnew sc");
       lines.push("\t;");
+      if (tabKeyDefs.length) {
+        lines.push(
+          `\tif ${tabKeyDefs.map((definition) => `($get(${definition.parameter})="")`).join("!")} quit $$$OK`
+        );
+        lines.push("\t;");
+      }
       lines.push(`\tdo $$$KillMergeG(${persistentBase},${workRoot})`);
       lines.push("\t;");
+
+      if (savedFields.length) {
+        lines.push('\tset dadosAba=""');
+        savedFields.forEach((definition, index) => {
+          lines.push(`\tset $piece(dadosAba,Z,${index + 1})=${definition.parameter}`);
+        });
+        lines.push(`\tdo $$$SetG(${persistentBase},dadosAba)`);
+        lines.push("\t;");
+      }
+
       lines.push("\tquit $$$OK");
       lines.push("\t;");
+
+      if (savedFields.length) {
+        const obtainParams = [...keyParams, ...savedFields.map((definition) => definition.parameter)];
+        lines.push(`\t; Obter Dados ${u.sanitize(config.title)}`);
+        lines.push("\t;");
+        lines.push(`\t; set sc=$$ObterDados${config.entityName}^${config.rgRoutineName}(${[...keyParams, ...savedFields.map((definition) => `.${definition.parameter}`)].join(",")})`);
+        lines.push(`ObterDados${config.entityName}(${obtainParams.join(",")})\t;`);
+        lines.push("\t$$$VAR");
+        lines.push("\tnew dadosAba");
+        lines.push("\t;");
+        lines.push(`\tset (${savedFields.map((definition) => definition.parameter).join(",")})=""`);
+        lines.push(`\tset dadosAba=$get(${persistentBase})`);
+        savedFields.forEach((definition, index) => {
+          lines.push(`\tset ${definition.parameter}=$piece(dadosAba,Z,${index + 1})`);
+        });
+        lines.push("\t;");
+        lines.push("\tquit $$$OK");
+        lines.push("\t;");
+      }
     }
 
     lines.push("\t; Excluir Global de Trabalho");
@@ -3029,7 +3693,9 @@
     // Quando o corpo lê a global persistente, os índices dela (codEmpresa e
     // as chaves) precisam entrar na assinatura.
     const persistentParameters =
-      config.gridMaintenance && key ? app.indexes.rgParameters(config) : [];
+      config.gridMaintenance && key
+        ? app.indexes.rgParameters(config)
+        : (sessionCompanyLoad(config) ? ["codEmpresa"] : []);
 
     lines.push("\t; Gerar Global de Trabalho");
     lines.push(
@@ -3063,7 +3729,18 @@
     lines.push("\tif $$$ISERR(sc) quit sc");
     lines.push("\t;");
 
-    if (config.gridMaintenance && key) {
+    const workGlobalHook = String(
+      (config.gridInTab ? tabHooks(config) : ((app.state && app.state.ruleHooks) || {})).workGlobalCode || ""
+    ).trim();
+    if (workGlobalHook) {
+      lines.push(`\tset ${mtempVariable}=""`);
+      workGlobalHook.replace(/\r\n/g, "\n").split("\n").forEach((line) => {
+        const text = line.split("{mtemp}").join(mtempVariable);
+        if (!text.trim()) lines.push("\t;");
+        else if (/^[%A-Za-z0-9]+\t/.test(text)) lines.push(text);
+        else lines.push(`\t${text.replace(/^\t/, "")}`);
+      });
+    } else if (config.gridMaintenance && key) {
       const loopNode =
         loopVariable === key.parameter
           ? persistentNode
@@ -3078,6 +3755,11 @@
     } else {
       lines.push("\t; TODO: percorrer a origem dos dados, montar a variável da global de trabalho");
       lines.push(`\t; e chamar: set sc=$$GravarGlobalTrabalho(${joinCallArguments([...workContextParameters, workRecordName, mtempVariable])})`);
+    }
+
+    if (!config.gridMaintenance && !config.gridInTab) {
+      lines.push("\t;");
+      lines.push(`\tif $$$ISOK(sc),$order(${appendSubscript(workRoot, '""')})="" quit $$$ERROR(10000,"Não há dados para consulta!")`);
     }
 
     lines.push("\t;");
@@ -3107,6 +3789,44 @@
       lines.push(`ExisteGlobalTrabalho(${joinCallArguments([...workContextParameters, workRecordName])})\t;`);
       lines.push(`\tquit $data(${workItem})`);
       lines.push("\t;");
+
+      if (autoSequenceMode(config)) {
+        const lastItem = appendSubscript(workRoot, '""');
+        const itemFor = (variable) => appendSubscript(workRoot, variable);
+        lines.push("\t; Próxima Sequência");
+        lines.push("\t;");
+        lines.push(`\t; set sequencia=$$ProximaSequencia^${config.rgRoutineName}(${workContextParameters.join(",")})`);
+        lines.push(`ProximaSequencia(${workContextParameters.join(",")})\t;`);
+        lines.push("\t$$$VAR");
+        lines.push("\tnew ultima");
+        lines.push("\t;");
+        lines.push(`\tset ultima=$order(${lastItem},-1)`);
+        lines.push("\t;");
+        lines.push('\tquit $select(ultima="":1,1:ultima+1)');
+        lines.push("\t;");
+      }
+
+      if (autoSequenceMode(config) === "editavel") {
+        const itemFor = (variable) => appendSubscript(workRoot, variable);
+        lines.push("\t; Reordenar Global de Trabalho");
+        lines.push("\t;");
+        lines.push(`\t; set sc=$$ReordenarGlobalTrabalho^${config.rgRoutineName}(${joinCallArguments([...workContextParameters, "sequenciaAnterior", "sequenciaNova"])})`);
+        lines.push(`ReordenarGlobalTrabalho(${joinCallArguments([...workContextParameters, "sequenciaAnterior", "sequenciaNova"])})\t;`);
+        lines.push("\t$$$VAR");
+        lines.push("\tnew sequencia");
+        lines.push("\t;");
+        lines.push('\tif $get(sequenciaAnterior)=sequenciaNova quit $$$OK');
+        lines.push(`\tif $get(sequenciaAnterior)'="" kill ${itemFor("sequenciaAnterior")}`);
+        lines.push(`\tif '$data(${itemFor("sequenciaNova")}) quit $$$OK`);
+        lines.push("\t;");
+        lines.push('\tset sequencia=""');
+        lines.push(`\tfor  set sequencia=$order(${itemFor("sequencia")},-1) quit:sequencia=""!(sequencia<sequenciaNova)  do`);
+        lines.push(`\t. merge ${itemFor("sequencia+1")}=${itemFor("sequencia")}`);
+        lines.push(`\t. kill ${itemFor("sequencia")}`);
+        lines.push("\t;");
+        lines.push("\tquit $$$OK");
+        lines.push("\t;");
+      }
     }
 
     if (checkDefs.length) {
@@ -3171,7 +3891,8 @@
     lines.push("\t; Gravar Grid");
     lines.push(`GravarGrid(${joinCallArguments([...gridContextParameters, "rotina", workRecordName, gridRegistrationParameter])})\t;`);
     lines.push("\t$$$VAR");
-    lines.push(`\tnew sc,dados,display,detalha,${mtempVariable}`);
+    const hasColor = state.gridColumns.some((column) => String(column.backgroundColor || "").trim() || String(column.fontColor || "").trim());
+    lines.push(`\tnew sc,dados,display,detalha,${mtempVariable}${hasColor ? ",corFundo,corFonte" : ""}`);
     if (columnVariables.length) {
       lines.push(`\tnew ${columnVariables.join(",")}`);
     }
@@ -3282,11 +4003,32 @@
       });
     }
 
+    const colored = state.gridColumns
+      .map((column, index) => ({ column, piece: index + 1 }))
+      .filter(({ column }) => String(column.backgroundColor || "").trim() || String(column.fontColor || "").trim());
+    if (colored.length) {
+      lines.push("\t;");
+      lines.push("\tset (corFundo,corFonte)=\"\"");
+      colored.forEach(({ column, piece }) => {
+        if (String(column.backgroundColor || "").trim()) lines.push(`\tset $piece(corFundo,Z,${piece})=${String(column.backgroundColor).trim()}`);
+        if (String(column.fontColor || "").trim()) lines.push(`\tset $piece(corFonte,Z,${piece})=${String(column.fontColor).trim()}`);
+      });
+    }
+
+    const dynamicColumnsRg = dynamicColumnsOf(config);
+    if (dynamicColumnsRg) {
+      const base = state.gridColumns.length;
+      const first = dynamicColumnsRg.firstWorkPiece;
+      lines.push("\t;");
+      lines.push(`\tif $length(${mtempVariable},Z)'<${first} set $piece(dados,Z,${base + 1},${base}+$length(${mtempVariable},Z)-${first - 1})=$piece(${mtempVariable},Z,${first},$length(${mtempVariable},Z))`);
+    }
+
     lines.push("\t;");
-    lines.push(`\tset sc=$$GravarLinhas^%CSW1GRID(${runtimeTermParameter},rotina,${config.gridCode},dados,$select(display'="":display,1:""),detalha,$get(${gridRegistrationParameter}),,,,,,1)`);
+    lines.push(`\tset sc=$$GravarLinhas^%CSW1GRID(${runtimeTermParameter},rotina,${config.gridCode},dados,$select(display'="":display,1:""),detalha,$get(${gridRegistrationParameter}),${colored.length ? "corFundo,corFonte" : ","},,,,1)`);
     lines.push("\t;");
     lines.push("\tquit sc");
     lines.push("\t;");
+    if (config.gridInTab) lines.push(...u.renderHookLines(tabHooks(config).extraMethods));
     lines.push("\t; Tags CSW");
     lines.push("\t;");
     lines.push("\t; csw:csp:naogerar");
@@ -3343,7 +4085,8 @@
           arguments: [
             ...app.indexes.macArguments(),
             ...gridTabKeyDefinitions(config).map((definition) => definition.variable),
-            "CT"
+            "CT",
+            ...savedFieldDefinitions(config).map((definition) => definition.variable)
           ]
         };
       }, baseConfig))

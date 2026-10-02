@@ -390,7 +390,9 @@
     ]);
     const keyIndexes = state.globalIndexes.filter((index) => index.type === "key");
 
-    if (config.useRules && config.routineMode === "crud" && !keyIndexes.length) {
+    const companyKey = app.indexes.usesRoutineCompany(config) &&
+      state.globalIndexes.some((index) => index.type === "company");
+    if (config.useRules && config.routineMode === "crud" && !keyIndexes.length && !companyKey) {
       add.error(
         "sem-chave",
         "Nenhuma chave foi definida nos índices da global.",
@@ -754,7 +756,7 @@
         );
       }
 
-      if (settings.gridMaintenance === true && !hasEditable) {
+      if (settings.gridMaintenance === true && !hasEditable && (settings.gridAllowInsert !== false || settings.gridAllowRemove !== false)) {
         add.warn(
           "grid-manutencao-sem-coluna",
           `${where}: a manutenção inline está ligada mas nenhuma coluna é editável.`,
@@ -763,6 +765,7 @@
       }
 
       const seenVariables = new Map();
+      const seenPieces = new Map();
       columns.forEach((column, index) => {
         const variable = normalize(column.variable, "");
 
@@ -786,12 +789,29 @@
 
         const piece = Number(column.workPiece);
         // A coluna chave é o subscrito da global de trabalho, não um piece.
-        if (column.type !== "checkheader" && column.recordKey !== true && !(piece > 0)) {
+        if (column.type !== "checkheader" && column.recordKey !== true && column.displayOnly !== true && !(piece > 0)) {
           add.warn(
             "grid-coluna-sem-piece",
             `${where}: a coluna "${column.title || variable}" não tem piece da global de trabalho.`,
             { where }
           );
+        }
+
+        if (
+          column.type !== "checkheader" &&
+          column.recordKey !== true &&
+          column.displayOnly !== true &&
+          piece > 0
+        ) {
+          if (seenPieces.has(piece)) {
+            add.error(
+              "grid-piece-repetido",
+              `${where}: as colunas "${seenPieces.get(piece)}" e "${column.title || variable}" usam o mesmo piece ${piece}.`,
+              { hint: "Cada coluna precisa de um piece próprio na global de trabalho.", where }
+            );
+          } else {
+            seenPieces.set(piece, column.title || variable);
+          }
         }
       });
     });
@@ -800,6 +820,384 @@
   /* ------------------------------------------------------------------ *
    * Regras — rotinas 299 geradas
    * ------------------------------------------------------------------ */
+
+  /* ------------------------------------------------------------------ *
+   * Código gerado (.mac da interface e da RG)
+   *
+   * As outras verificações olham o projeto; estas leem o código que vai para
+   * o servidor, porque os erros que mais escaparam só aparecem nele.
+   * ------------------------------------------------------------------ */
+
+  function generatedRoutines(generator) {
+    try {
+      return Object.values((generator && generator.generateAll()) || {});
+    } catch {
+      return [];
+    }
+  }
+
+  function routineLabels(code) {
+    const labels = [];
+    let current = null;
+    String(code || "").split("\n").forEach((line) => {
+      const match = /^([%A-Za-z0-9]+)(?:\(([^)]*)\))?(?=\t|$)/.exec(line);
+      if (match) {
+        current = {
+          name: match[1],
+          formal: match[2] === undefined ? null : match[2].split(",").map((item) => item.trim()).filter(Boolean),
+          lines: [line]
+        };
+        labels.push(current);
+      } else if (current) {
+        current.lines.push(line);
+      }
+    });
+    return labels;
+  }
+
+  function knownVariables(label) {
+    const known = new Set(label.formal || []);
+    label.lines.forEach((line) => {
+      const body = line.replace(/;.*$/, "");
+      const news = /\bnew\s+([^\s]+)/.exec(body);
+      if (news) news[1].split(",").forEach((item) => known.add(item.trim()));
+      for (const set of body.matchAll(/\bset(?::[^\s]+)?\s+\(?([A-Za-z%][A-Za-z0-9]*(?:\s*,\s*[A-Za-z%][A-Za-z0-9]*)*)\)?\s*=/g)) {
+        set[1].split(",").forEach((item) => known.add(item.trim()));
+      }
+      for (const loop of body.matchAll(/\bfor\s+set\s+([A-Za-z%][A-Za-z0-9]*)=/g)) known.add(loop[1]);
+      for (const merge of body.matchAll(/\bmerge\s+([A-Za-z%][A-Za-z0-9]*)[=(]/g)) known.add(merge[1]);
+    });
+    return known;
+  }
+
+  function checkRuleVariables(add, config) {
+    generatedRoutines(app.rg).forEach((routine) => {
+      routineLabels(routine.code)
+        .filter((label) => label.formal)
+        .forEach((label) => {
+          const known = knownVariables(label);
+          const unknown = new Set();
+          label.lines.forEach((line) => {
+            const body = line.replace(/;.*$/, "");
+            for (const reference of body.matchAll(/\^[%A-Za-z][A-Za-z0-9]*\(([^()]*)\)/g)) {
+              reference[1].split(",").forEach((argument) => {
+                const clean = argument.trim();
+                if (/^[a-z][A-Za-z0-9]*$/.test(clean) && !known.has(clean)) unknown.add(clean);
+              });
+            }
+          });
+          unknown.forEach((variable) => {
+            add.error(
+              "rg-variavel-sem-parametro",
+              `${routine.routineName}: ${label.name}() usa "${variable}" na global sem receber como parâmetro nem dar new.`,
+              {
+                hint: "Normalmente é a chave de uma aba que não chegou na assinatura do método. Confira a chave da aba e o subscrito da global.",
+                where: routine.routineName
+              }
+            );
+          });
+        });
+    });
+  }
+
+  function checkRuleCalls(add, config) {
+    const rgName = normalize(config.rgRoutineName, "");
+    if (!rgName) return;
+    generatedRoutines(app.mac).forEach((routine) => {
+      String(routine.code || "").split("\n").forEach((line) => {
+        const match = new RegExp(`\\bdo\\s+([A-Za-z0-9]+)\\^(${rgName}[A-Za-z0-9]*)\\(`).exec(line.replace(/;.*$/, ""));
+        if (match && !/^(Gerar|Criar)/.test(match[1])) {
+          add.error(
+            "regra-chamada-com-do",
+            `${routine.routineName}: a regra ${match[1]}^${match[2]} é chamada com do.`,
+            { hint: "Regra é função: set sc=$$Label^RG(...) e trate o sc.", where: routine.routineName }
+          );
+        }
+      });
+    });
+  }
+
+  function checkResetVariables(add) {
+    generatedRoutines(app.mac).forEach((routine) => {
+      const code = String(routine.code || "");
+      const news = /^\tnew\s+([^\r\n]+)/m.exec(code);
+      if (!news) return;
+      const declared = new Set(news[1].split(",").map((item) => item.trim()));
+      const reset = /^0500\t[^\n]*\n\tset \(([^)]*)\)=""/m.exec(code);
+      if (!reset) return;
+      reset[1].split(",").map((item) => item.trim()).filter((item) => item && !declared.has(item)).forEach((variable) => {
+        add.error(
+          "variavel-sem-new",
+          `${routine.routineName}: o 0500 limpa ${variable}, que não está no new da rotina.`,
+          { hint: "Variável sem new vaza para fora da rotina e o compilador do CSW acusa.", where: routine.routineName }
+        );
+      });
+    });
+  }
+
+  function checkLocalLabelTargets(add) {
+    [...generatedRoutines(app.mac), ...generatedRoutines(app.rg)].forEach((routine) => {
+      const code = String(routine.code || "");
+      const labels = new Set();
+      code.split("\n").forEach((line) => {
+        const match = /^([%A-Za-z0-9]+)(?:\(|\t|$)/.exec(line);
+        if (match && !line.startsWith("ROUTINE ")) labels.add(match[1]);
+      });
+      const missing = new Set();
+      code.split("\n").forEach((line) => {
+        const body = line.replace(/"[^"]*"/g, '""').replace(/\s;.*$/, "");
+        for (const command of body.matchAll(/(?:^|[\s.])(?:goto|g|do|d)(?::[^ ]+)? ([^ ]+)/gi)) {
+          let argument = command[1];
+          while (/\([^()]*\)/.test(argument)) argument = argument.replace(/\([^()]*\)/g, "");
+          argument.split(",").forEach((target) => {
+            const clean = target.split(":")[0].trim();
+            if (!clean || clean.includes("^") || clean.includes("(") || clean.startsWith("$") || clean.startsWith("@")) return;
+            if (!/^[%A-Za-z0-9]+$/.test(clean)) return;
+            if (!labels.has(clean)) missing.add(clean);
+          });
+        }
+        for (const call of body.matchAll(/(?<!\$)\$\$([%A-Za-z0-9]+)\(/g)) {
+          const after = body.slice(call.index + call[0].length - 1);
+          const closing = after.indexOf(")");
+          const next = closing >= 0 ? after.slice(closing + 1, closing + 2) : "";
+          if (next === "^") continue;
+          if (!labels.has(call[1])) missing.add(call[1]);
+        }
+      });
+      missing.forEach((label) => {
+        add.error(
+          "label-inexistente",
+          `${routine.routineName}: goto/do para o label ${label}, que não existe na rotina.`,
+          { hint: "O compilador acusa <NOLINE>. Confira qual recurso deveria gerar esse label.", where: routine.routineName }
+        );
+      });
+    });
+  }
+
+  function checkButtonsOverGrid(add) {
+    if (!app.grid || !app.customButtons) return;
+    const locations = ["parent", ...(app.state.tabs || []).filter((tab) => tab.contentType === "grid").map((tab) => tab.id)];
+
+    locations.forEach((locationId) => {
+      const isParentGrid = locationId === "parent" && app.getConfig().routineMode === "grid";
+      if (locationId === "parent" && !isParentGrid) return;
+
+      let settings;
+      try {
+        settings = (app.grid.ensureLocation(locationId) || {}).settings || {};
+      } catch {
+        return;
+      }
+      const top = Number(settings.gridLinePosition) || 1;
+      const lineEnd = Number(settings.gridLineEnd) || top + (Number(settings.gridHeight) || 1);
+      const bottom = Math.max(top + (Number(settings.gridHeight) || 1) + 1, lineEnd + 3);
+
+      app.customButtons.buttonsForLocation(locationId).forEach((button) => {
+        const position = typeof app.customButtons.resolvedPosition === "function"
+          ? app.customButtons.resolvedPosition(button)
+          : button;
+        const line = Number(position.line) || 0;
+        const left = Number(settings.gridColumnPosition) || 0;
+        const right = left && Number(settings.gridTableWidth) ? left + Number(settings.gridTableWidth) : Infinity;
+        const buttonLeft = Number(position.column) || 0;
+        const buttonRight = buttonLeft + (Number(position.size) || Number(button.size) || 10);
+        const overlapsColumns = !left || (buttonRight > left && buttonLeft < right);
+        if (line >= top && line <= bottom && overlapsColumns) {
+          add.error(
+            "botao-sobre-grid",
+            `Botão "${String(button.text || "").replace(/<\/?u>/gi, "")}" na linha ${line}, dentro da área do grid (linhas ${top} a ${bottom}).`,
+            { hint: `Coloque o botão a partir da linha ${bottom + 1} ou diminua a altura do grid.`, where: "Botões personalizados" }
+          );
+        }
+      });
+    });
+  }
+
+  function checkDeprecatedComponents(add) {
+    [...generatedRoutines(app.mac), ...generatedRoutines(app.rg)].forEach((routine) => {
+      const code = String(routine.code || "");
+      const name = (code.match(/^ROUTINE (\S+)/) || [])[1] || "rotina";
+      const found = new Set();
+      code.split("\n").forEach((line) => {
+        if (/^\s*;/.test(line.replace(/^[%A-Za-z0-9]+\t/, "\t"))) return;
+        if (/\bAG\^%CSUTIUD\b|\bAG\^%CSW1UTI\b/.test(line)) found.add("AG^%CSUTIUD/AG^%CSW1UTI");
+        if (/\bFJAG\^%CSW1UTI\b/.test(line)) found.add("FJAG^%CSW1UTI");
+        if (/csw:gridCols:[^"]*\b(List|Csv)=/.test(line)) found.add("List=/Csv= no gridCols");
+      });
+      found.forEach((item) => {
+        add.error("componente-descontinuado", `${name}: usa ${item}, descontinuado.`, {
+          hint: "AG/FJAG: escreva a carga em linha, sem label de retorno. gridCols: só Csw=largura^título^flags.",
+          where: name
+        });
+      });
+    });
+  }
+
+  function checkF7WithArguments(add) {
+    generatedRoutines(app.mac).forEach((routine) => {
+      const code = String(routine.code || "");
+      const name = (code.match(/^ROUTINE (\S+)/) || [])[1] || "rotina";
+      const found = new Set();
+      code.split("\n").forEach((line) => {
+        if (!/\^%CSLE\(/.test(line)) return;
+        const matches = line.match(/[",]([%A-Za-z][A-Za-z0-9]*\([^()"]*\)\^[%A-Za-z][A-Za-z0-9]*)/g) || [];
+        matches.forEach((item) => found.add(item.slice(1)));
+      });
+      found.forEach((item) => {
+        const [, label, args, rotina] = item.match(/^([^()]+)(\([^()]*\))\^(.+)$/);
+        add.error("f7-parametro-invertido", `${name}: F7 "${item}" com o parâmetro antes da rotina.`, {
+          hint: `Use "${label}^${rotina}${args}" (o CSW acusa <NOROUTINE> no TrataF7).`,
+          where: name
+        });
+      });
+    });
+  }
+
+  function checkOverlappingButtons(add) {
+    generatedRoutines(app.mac).forEach((routine) => {
+      const code = String(routine.code || "");
+      const name = (code.match(/^ROUTINE (\S+)/) || [])[1] || "rotina";
+      const boxes = [];
+      code.split("\n").forEach((line) => {
+        const tag = line.match(/;\s*csw:(botao|btnManut|btnManter|btnConsultar):(\d+),(\d+),([^\r\n]*)/);
+        if (!tag) return;
+        const [, kind, column, row, rest] = tag;
+        const parts = rest.split(",");
+        let width = 10;
+        let label = kind;
+        if (kind === "botao") {
+          label = String(parts[1] || parts[0] || "botão").replace(/<\/?u>/gi, "");
+          width = Number(parts[6]) || 10;
+        } else if (kind === "btnManut") {
+          const extras = [parts[1], parts[2]].filter((action) => action && action !== parts[0] && !/^2999\^/.test(action));
+          width = 10 * (1 + new Set(extras).size);
+          label = "Manutenção";
+        } else if (kind === "btnManter") {
+          width = 21;
+          label = "Salvar/Cancelar";
+        } else {
+          label = "Consultar";
+        }
+        boxes.push({ label, line: Number(row), left: Number(column), right: Number(column) + width });
+      });
+      boxes.forEach((box, index) => {
+        boxes.slice(index + 1).forEach((other) => {
+          if (other.line === box.line && other.left < box.right && box.left < other.right) {
+            add.error(
+              "botao-sobreposto",
+              `${name}: botões "${box.label}" e "${other.label}" no mesmo lugar (linha ${box.line}, colunas ${box.left} e ${other.left}).`,
+              { hint: "Informe coluna/linha diferentes (ex.: maintenanceButtonColumn no grid).", where: name }
+            );
+          }
+        });
+      });
+    });
+  }
+
+  function checkCallsIntoGeneratedRoutines(add) {
+    const routines = [...generatedRoutines(app.mac), ...generatedRoutines(app.rg)];
+    const labelsByRoutine = new Map();
+    routines.forEach((routine) => {
+      const code = String(routine.code || "");
+      const name = (code.match(/^ROUTINE (\S+)/) || [])[1];
+      if (!name) return;
+      const labels = new Set(routineLabels(code).map((label) => label.name));
+      labelsByRoutine.set(name, labels);
+    });
+    routines.forEach((routine) => {
+      const code = String(routine.code || "");
+      const caller = (code.match(/^ROUTINE (\S+)/) || [])[1] || "rotina";
+      const reported = new Set();
+      const pattern = /\$\$([%A-Za-z0-9]+)\^([%A-Za-z0-9]+)\(/g;
+      let match;
+      while ((match = pattern.exec(code))) {
+        const [, label, target] = match;
+        const labels = labelsByRoutine.get(target);
+        if (!labels || labels.has(label)) continue;
+        const key = `${label}^${target}`;
+        if (reported.has(key)) continue;
+        reported.add(key);
+        add.error("chamada-label-inexistente", `${caller}: chama $$${label}^${target}, mas ${target} (gerada agora) não tem o label ${label}.`, {
+          hint: "Defina o método (ruleHooks/hooks.extraMethods) ou troque a chamada por uma regra existente.",
+          where: caller
+        });
+      }
+    });
+  }
+
+  function checkRequiredSequenceKey(add, state) {
+    (state.fields || []).forEach((field) => {
+      if (field.required !== true) return;
+      if (!/if\s+\{reference\}\s*=\s*""\s+set\s/.test(String(field.valcpCode || ""))) return;
+      add.error("obrigatorio-com-sugestao", `Campo "${field.description}": é obrigatório e o valcp sugere o próximo código quando vazio — o obrigatório barra antes da sugestão.`, {
+        hint: "Tire o required do campo; a sugestão já garante o valor.",
+        where: `Campo "${field.description}"`
+      });
+    });
+  }
+
+  function checkKillMergeOverSet(add) {
+    generatedRoutines(app.rg).forEach((routine) => {
+      const name = (String(routine.code || "").match(/^ROUTINE (\S+)/) || [])[1] || "RG";
+      routineLabels(routine.code).forEach((label) => {
+        const set = new Set();
+        (label.lines || label.body || []).forEach((line) => {
+          const text = String(line);
+          const setMatch = text.match(/\$\$\$SetG\((\^[^,()]+\([^)]*\))/);
+          if (setMatch) set.add(setMatch[1]);
+          const killMatch = text.match(/\$\$\$KillMergeG\((\^[^,()]+\([^)]*\))/);
+          if (killMatch && set.has(killMatch[1])) {
+            add.error("killmerge-apaga-dados", `${name}: ${label.name || "método"} grava ${killMatch[1]} e depois faz KillMerge no mesmo nó (os dados gravados somem).`, {
+              hint: "Dê à multiseleção um nó próprio (multiSelectGlobalReference, ex.: ^GLOBAL(1,{company},1,1)) ou uma chave de aba.",
+              where: name
+            });
+          }
+        });
+      });
+    });
+  }
+
+  function checkDuplicateLabels(add) {
+    [...generatedRoutines(app.mac), ...generatedRoutines(app.rg)].forEach((routine) => {
+      const code = String(routine.code || "");
+      const name = String(routine.routineName || "").trim() || (code.match(/^ROUTINE (\S+)/) || [])[1] || "rotina";
+      const seen = new Set();
+      const reported = new Set();
+      code.split("\n").forEach((line) => {
+        const match = line.match(/^([%A-Za-z0-9]+)(?=\t|\(|\s|$)/);
+        if (!match || line.startsWith("ROUTINE ")) return;
+        const label = match[1];
+        if (seen.has(label) && !reported.has(label)) {
+          reported.add(label);
+          add.error("label-duplicado", `${name}: o label ${label} está definido mais de uma vez.`, {
+            hint: "Renomeie o método do projeto (ruleHooks/hooks) ou remova a cópia: o gerador já cria esse label.",
+            where: name
+          });
+        }
+        seen.add(label);
+      });
+    });
+  }
+
+  function checkButtonIds(add) {
+    generatedRoutines(app.mac).forEach((routine) => {
+      const seen = new Map();
+      String(routine.code || "").split("\n").forEach((line) => {
+        const match = /;\s*csw:botao:[^,]*,[^,]*,([^,]+),([^,]*)/.exec(line);
+        if (!match) return;
+        const id = match[1].trim();
+        if (seen.has(id)) {
+          add.error(
+            "botao-id-repetido",
+            `${routine.routineName}: os botões "${seen.get(id)}" e "${match[2]}" usam o mesmo id ${id}.`,
+            { hint: "Cada botão precisa de um buttonId próprio.", where: routine.routineName }
+          );
+        } else {
+          seen.set(id, match[2]);
+        }
+      });
+    });
+  }
 
   function checkGeneratedF7(add, config) {
     if (!app.f7 || typeof app.f7.generateAll !== "function") return;
@@ -879,6 +1277,19 @@
       checkGrids(add, config, state);
       checkConsultButtons(add, config, state);
       checkGeneratedF7(add, config);
+      checkRuleVariables(add, config);
+      checkRuleCalls(add, config);
+      checkResetVariables(add);
+      checkButtonIds(add);
+      checkButtonsOverGrid(add);
+      checkLocalLabelTargets(add);
+      checkDuplicateLabels(add);
+      checkKillMergeOverSet(add);
+      checkRequiredSequenceKey(add, state);
+      checkCallsIntoGeneratedRoutines(add);
+      checkDeprecatedComponents(add);
+      checkOverlappingButtons(add);
+      checkF7WithArguments(add);
     } catch (error) {
       add.warn("validador-erro", `O validador encontrou um erro interno: ${error.message}`);
     }

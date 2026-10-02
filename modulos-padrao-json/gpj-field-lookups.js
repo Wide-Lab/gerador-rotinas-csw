@@ -81,14 +81,12 @@
       f7Routine: "%CSCV^CCPV299",
       extraVariables: "CSCV,DESCVEN",
       valcpCode: [
-        "set sc=$$ValidarCampoCondicaoVenda^{rgRoutine}(CE,{reference},.DESCVEN)",
-        "if $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0",
-        ";",
         "set sc=$$VerCondicaoVenda^CCFTRG001(CE,{reference},.CSCV)",
         "if sc'=1 do ME^%CSUTICSP(sc) quit 0",
         ";",
         "if $piece(CSCV,Z,16)=0 do ME^%CSUTIUD(\"Condição de venda inativa!\") quit 0",
         ";",
+        "set DESCVEN=$piece(CSCV,Z,12)",
         "do Set^%CSW1UTI(%PRG,\"{display}\",DESCVEN)"
       ].join("\n"),
       displayLoadMode: "valcp",
@@ -229,7 +227,92 @@
 
     return {
       ...presets,
-      ...catalogPresets
+      ...catalogPresets,
+      ...savedPresets(),
+      ...ownF7Preset()
+    };
+  }
+
+  const SAVED_KEY = "gpj-f7-catalogo-usuario";
+
+  function savedEntries() {
+    try {
+      const bruto = JSON.parse(localStorage.getItem(SAVED_KEY) || "[]");
+      return Array.isArray(bruto) ? bruto : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function savedPresets() {
+    return savedEntries().reduce((result, item) => {
+      if (!item || !item.key || !item.f7Routine) return result;
+
+      result[item.key] = {
+        label: item.label || item.key,
+        group: "Gerados aqui",
+        f7Routine: item.f7Routine,
+        extraVariables: item.extraVariables || "",
+        valcpCode: "",
+        displayLoadMode: "reference",
+        displayLoadCode: "",
+        autoDisplay: true,
+        typedReaderEnabled: false
+      };
+      return result;
+    }, {});
+  }
+
+  function saveLookup(entry) {
+    if (!entry || !entry.key || !entry.f7Routine) return false;
+
+    const atuais = savedEntries().filter((item) => item.key !== entry.key);
+    atuais.push(entry);
+
+    try {
+      localStorage.setItem(SAVED_KEY, JSON.stringify(atuais));
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function removeLookup(key) {
+    try {
+      localStorage.setItem(
+        SAVED_KEY,
+        JSON.stringify(savedEntries().filter((item) => item.key !== key))
+      );
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function ownF7Preset() {
+    if (!app.f7 || typeof app.f7.ownLookupDefinition !== "function") return {};
+
+    let definition = null;
+    try {
+      definition = app.f7.ownLookupDefinition();
+    } catch (error) {
+      return {};
+    }
+
+    if (!definition) return {};
+
+    return {
+      ownF7: {
+        label: `${definition.entity} — F7 deste cadastro`,
+        group: "Deste projeto",
+        f7Routine: `${definition.label}^${definition.routineName}`,
+        extraVariables: definition.company ? "CODEMP" : "",
+        valcpCode: "",
+        displayLoadMode: "reference",
+        displayLoadCode: "",
+        autoDisplay: true,
+        typedReaderEnabled: false
+      }
     };
   }
 
@@ -402,6 +485,9 @@
       (String(field.valcpCode || "").trim() ? "valcp" : "reference");
     el.fieldLookupDisplayCode.value = field.displayLoadCode || "";
 
+    if (el.fieldMultiSelectSource) el.fieldMultiSelectSource.value = field.multiSelectSource === "lista" ? "lista" : "codigo";
+    if (el.fieldMultiSelectOptionsVariable) el.fieldMultiSelectOptionsVariable.value = field.multiSelectOptionsVariable || "";
+    if (el.fieldMultiSelectOptionsLoad) el.fieldMultiSelectOptionsLoad.value = field.multiSelectOptionsLoad || "";
     el.fieldMultiSelectTableVariable.value = field.multiSelectTableVariable || "";
     el.fieldMultiSelectSelectedText.value = field.multiSelectSelectedText || "Selecionados";
     el.fieldMultiSelectGlobalReference.value = field.multiSelectGlobalReference || "";
@@ -458,6 +544,12 @@
     field.displayLoadCode = el.fieldLookupDisplayCode.value
       .replace(/\r\n/g, "\n")
       .trim();
+    if (el.fieldMultiSelectSource) {
+      field.multiSelectSource = el.fieldMultiSelectSource.value === "lista" ? "lista" : "codigo";
+      field.multiSelectOptionsVariable = el.fieldMultiSelectOptionsVariable.value.trim();
+      field.multiSelectOptionsLoad = el.fieldMultiSelectOptionsLoad.value.trim();
+      if (field.multiSelectSource === "lista") field.hasDisplay = false;
+    }
     field.multiSelectTableVariable = el.fieldMultiSelectTableVariable.value.trim();
     field.multiSelectSelectedText = el.fieldMultiSelectSelectedText.value.trim() || "Selecionados";
     field.multiSelectGlobalReference = el.fieldMultiSelectGlobalReference.value.trim();
@@ -635,6 +727,9 @@
     close,
     clear,
     applyPresetToField,
-    presetOptions
+    presetOptions,
+    saveLookup,
+    removeLookup,
+    savedEntries
   };
 })(window.GeradorRotinasJsonPadrao);

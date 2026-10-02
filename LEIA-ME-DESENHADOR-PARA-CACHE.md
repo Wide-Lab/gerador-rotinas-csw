@@ -464,3 +464,260 @@ campo informativo comum — antes ganhava todo o ciclo de incluir/excluir item.
 **Grid que não cabe.** Um grid de 18 colunas somava 220 caracteres numa tela de 104. As
 colunas maiores encolhem até caber, respeitando um mínimo por tipo (número 6, data 10,
 texto 8); quando nem no mínimo cabe, o aviso diz o tamanho real e sugere tirar colunas.
+
+## Buscar direto no builder (sem copiar e colar)
+
+O desenhador publicado é o **builder** (`https://builder.widelab.com.br`): front Vite/React
+na frente de um back NestJS com Mongo. Cada projeto é gravado com um campo `routines`, e o
+que está lá dentro é **exatamente** o JSON que antes se colava na modal — o desenhador não
+transforma nada entre a tela e o banco.
+
+Então a modal ganhou duas linhas em cima do textarea:
+
+```
+Builder [ https://builder.widelab.com.br ]  Token [ ····· ]  (Listar projetos)
+Projeto [ combo com os projetos ▾ ]  [ id ou URL ]        (Buscar)
+```
+
+- **Listar projetos** faz `GET {api}/project` e enche a combo com nome e número de telas.
+  Escolher um item já dispara a busca.
+- **Buscar** faz `GET {api}/project/{id}`, desembrulha o array que a API devolve, joga
+  `routines` no textarea e roda a conversão de sempre. O campo aceita o id cru ou uma URL
+  colada da barra do navegador — o id de 24 dígitos é extraído.
+- Endereço, token e último projeto ficam no `localStorage` (`gpj-desenhador-builder`), então
+  na próxima vez é um clique.
+
+O textarea continua valendo: quem preferir colar, cola. A busca só preenche o mesmo campo.
+
+### O token
+
+A rota exige credencial no ambiente publicado. O token sai do próprio desenhador — com o
+builder aberto, no console do navegador:
+
+```js
+localStorage.getItem("token")
+```
+
+Vale 7 dias. Token errado ou vencido devolve uma mensagem dizendo isso e onde achar o
+certo, em vez de um erro de rede seco.
+
+### Formatos que o `screensFrom` passou a aceitar
+
+Além do array de telas e do fragmento colado, agora entram:
+
+| origem                          | formato                                  |
+| ------------------------------- | ---------------------------------------- |
+| resposta da API                 | `[{ name, routines: [...] }]`            |
+| área de transferência do editor | `{ project: { routines: [...] } }`       |
+| chave em inglês                 | `{ routines: [...] }`                    |
+
+## Teste contra o acervo inteiro
+
+Com a API ligada dá para passar tudo que já foi desenhado pelo conversor, não só as cinco
+telas de exemplo. São 24 projetos e **106 telas com componentes**:
+
+```
+telas convertidas:      106
+telas que estouraram:     0
+```
+
+Os avisos que sobraram, agrupados: 82 de label dividida entre dois leitores, 27 de coluna
+"Ações", 27 de tela sem chave, 16 de grid que não cabe na largura, 14 de Confirmar/Cancelar
+no modo Grid, 4 de aba com dois grids.
+
+O campeão **não é defeito**: são telas de demonstrativo financeiro (`(-) Impostos`,
+`(=) Lucro Bruto`) onde uma label serve duas colunas de valor. O sufixo ` 2` está certo, só
+o nome fica feio.
+
+Os 27 "sem chave" são em boa parte telas de consulta e painel, que não têm chave mesmo —
+vale rever se o aviso deveria calar quando a rotina sai em modo Grid.
+
+Frequência dos componentes no acervo: `Label` 603, `Display` 398, `Csle` 276, `Button` 246,
+`Grid` 95, `TextArea` 30, `ComboBox` 25, `Tabs` 11, `RadioButton` 5. Nenhum `BtnManter` —
+esse componente está comentado fora do catálogo do desenhador, então ninguém desenhou um.
+
+## Miniatura: ver a tela como ela é no builder
+
+O quadro de campos diz o que virou o quê, mas não parece uma tela — na hora de
+escolher entre dez rotinas na combo, não dá para saber qual é qual.
+
+A modal agora desenha a tela escolhida em cima do quadro, com os componentes na
+mesma posição do builder e reduzidos para caber. Label alinhada à direita,
+Display cinza, Csle branco com a borda laranja e a lupa quando tem F7, botão
+escuro, grid com os títulos e as primeiras linhas de dado, radio com as opções,
+Tabs com as abas.
+
+O conteúdo é desenhado em tamanho natural e encolhido por `transform: scale()`,
+então o texto diminui junto e a proporção continua a do builder.
+
+A caixa **Miniatura** na barra liga e desliga, e a escolha fica no
+`localStorage` junto com as preferências do builder.
+
+### Por que ela arrebentava o modal
+
+`transform: scale()` desenha menor mas **não encolhe a caixa de layout**. Um
+desenho de 1200px continuava reservando 1200px na grade do modal: a coluna da
+esquerda era espremida até virar uma tira e a janela inteira crescia.
+
+Duas correções:
+
+- O canvas passou a viver dentro de uma **moldura já do tamanho reduzido**, com
+  `overflow: hidden`. O que o `scale()` desenha não vaza mais para o layout.
+- As colunas do corpo ganharam `min-width: 0`, senão o `1fr 1fr` do grid CSS
+  aceita ser empurrado pelo conteúdo.
+
+E a altura pulava a cada troca de tela — de 28px a 459px conforme o desenho. A
+caixa agora tem **altura fixa de 200px**, e o que passar disso **rola dentro
+dela**. Trocar de rotina na combo não mexe no tamanho de nada.
+
+A escala sai **só da largura**, nunca amplia. Entrar a altura na conta parece
+tentador — caberia tudo sem rolagem — mas espreme a tela alta até o texto virar
+borrão, e a miniatura existe justamente para reconhecer a tela de olho. Melhor
+manter o tamanho e arrastar.
+
+Medido nas 112 telas do acervo, com a caixa na largura que ela tem no navegador:
+
+```
+largura do conteúdo:  min 439  média 542  max 544   (limite 544)
+altura  do conteúdo:  min  28  média 205  max 459   (a caixa mostra 186)
+estouros de largura:  0
+```
+
+Metade das telas cabe inteira; a outra metade rola. A caixa, em todas, tem os
+mesmos 200px.
+
+O desenho também passou a ser recortado a partir do primeiro componente: telas
+desenhadas longe do canto superior esquerdo desperdiçavam uma faixa vazia do
+tamanho da margem.
+
+## Botão que abre outra rotina
+
+No desenho o `WDNRWORK002` (Cadastro de Workflow) tem um **Novo** que abre o
+`WDNRWORK002A`. O gerador sempre soube fazer isso — é o botão com *"Ao clicar:
+abrir outra tela"* — mas o importador não tinha como adivinhar o destino.
+
+Abaixo do quadro de campos aparece agora **Ao clicar, abrir**, uma linha por
+botão detectado, com a lista das outras telas do projeto carregado:
+
+```
+Novo        [ WDNRWORK002A — Workflow ▾ ]   do Show^WDNRWORK002A
+Detalhar    [ — label na própria rotina — ]  label 6100
+```
+
+Escolhido um destino, o botão sai como `actionType: "screen"` com
+`generateRoutine: false` — ou seja, aponta para a rotina que já existe em vez de
+mandar o gerador criar uma tela auxiliar. O `.mac` sai assim:
+
+```objectscript
+6000	;
+	do Show^WDNRWORK002A("6000EX^WDNRWORK002","()")
+	quit:$$CSP^%CSW1UTI()
+	;
+6000EX	goto 2999
+	; csw:botao:6,3,btNOVO,Novo,,6000^WDNRWORK002,,,8
+```
+
+A escolha fica guardada por tela e por botão, então trocar de tela na combo e
+voltar não perde nada.
+
+**Sugestão automática.** Botão cujo texto começa com Novo, Incluir, Inserir,
+Adicionar, Editar, Manutenção, Detalhar ou Abrir já vem apontando para a rotina
+que continua o nome da tela atual — `WDNRWORK002` → `WDNRWORK002A`. Quando há
+empate no nome mais curto a sugestão não é feita, para não chutar. Ela aparece
+selecionada na combo, dá para trocar ou zerar.
+
+### Correção junto: "Novo" sozinho sumia da tela
+
+Com grid na tela, os botões cujo texto casa com Incluir/Manutenção/Excluir são a
+manutenção em linha do grid (`btnManut`) e por isso saem da barra. Só que o corte
+acontecia **mesmo quando a manutenção em linha não era ligada** — ela exige dois
+ou mais desses botões juntos.
+
+Resultado: um **Novo** sozinho ao lado do grid não virava `btnManut` nem botão
+comum. Sumia. Era o caso do `WDNRWORK002` do print, do `WDNRWORK100`, do
+`WDNRWORK110` e dos três `WDEXEMPLO` do Linshalm — seis telas do acervo.
+
+Agora o corte só vale quando a manutenção em linha existe de fato. `Consultar` e
+`Limpar` continuam saindo da barra porque viram o `csw:btnConsultar`, que desenha
+os dois.
+
+## Escrevendo o JSON à mão
+
+Nem sempre se tem o builder aberto. O botão **Carregar exemplo** traz uma tela completa —
+campo de empresa, campo com F7, grid e a trinca de manutenção — que serve de molde:
+
+```json
+[
+  {
+    "id": "WDCCMOT010",
+    "name": "Cadastro de Motivo",
+    "index": 0,
+    "components": [
+      { "id": "Label",   "text": "Empresa", "x": 60, "y": 20, "width": "100px", "height": "24px", "index": 0 },
+      { "id": "Csle",    "text": "1", "x": 170, "y": 20, "width": "60px", "height": "24px", "f7": "F7", "index": 1 },
+      { "id": "Display", "text": "1 - Empresa Natreb", "x": 240, "y": 20, "width": "300px", "height": "24px", "index": 2 },
+
+      { "id": "Grid", "x": 60, "y": 120, "width": "800px", "height": "200px", "index": 8,
+        "gridData": {
+          "columns": [
+            { "title": "Setor",      "field": "codSetor",  "dataType": "n" },
+            { "title": "Descrição",  "field": "descSetor", "dataType": "a" },
+            { "title": "Vigência",   "field": "vigencia",  "dataType": "d" }
+          ],
+          "data": [
+            { "codSetor": "15", "descSetor": "Comercial", "vigencia": "01/01/2026" }
+          ]
+        }
+      },
+
+      { "id": "Button", "text": "Incluir",    "x": 60,  "y": 350, "width": "160px", "height": "24px", "icon": "fa-save",  "index": 9 },
+      { "id": "Button", "text": "Manutenção", "x": 240, "y": 350, "width": "160px", "height": "24px", "index": 10 },
+      { "id": "Button", "text": "Excluir",    "x": 420, "y": 350, "width": "160px", "height": "24px", "icon": "fa-trash", "index": 11 }
+    ]
+  }
+]
+```
+
+### A tela
+
+| chave | o que é |
+|---|---|
+| `id` | nome da rotina — vira o `.mac` e a `RG` |
+| `name` | título da tela |
+| `components` | a lista, na ordem em que foram desenhados |
+
+Um arquivo é um **array de telas**. Colar uma tela sozinha ou um recorte sem os colchetes
+também funciona.
+
+### Os componentes
+
+| `id` | vira | o que importa |
+|---|---|---|
+| `Label` | rótulo | o `text` nomeia o campo do leitor à direita |
+| `Csle` | leitor | `f7` preenchido liga a consulta; `text` é a amostra que define tipo e tamanho |
+| `Display` | descrição ao lado | fica à direita do leitor |
+| `ComboBox` | combo | `text` com barras (`Ativo/Inativo`) vira a tabela de opções |
+| `RadioButton` | radio | `options: [{label, value}]` |
+| `TextArea` | área de texto | a `height` define quantas linhas ocupa |
+| `Grid` | grid | `gridData.columns` e `gridData.data` |
+| `Button` | botão | `text` classifica; `icon` ajuda (`fa-save`, `fa-trash`, `fa-search`) |
+| `Tabs` | abas | `tabs: [{ name, routine }]` apontando outras telas do array |
+
+**Posição e tamanho em pixel.** `x`/`y` são números; `width`/`height` aceitam número ou
+`"200px"`. A conversão para a grade de 108 colunas é feita pela proporção do desenho — não
+precisa acertar coluna nenhuma, só manter as coisas alinhadas como ficariam na tela.
+
+**A regra do alinhamento:** label, leitor e display do mesmo campo ficam **na mesma linha**
+(mesmo `y`), a label à esquerda do leitor e o display à direita. É assim que o importador
+sabe que os três são o mesmo campo.
+
+### Detalhes que mudam o resultado
+
+- **`dataType` da coluna**: `n` número, `a` texto, `d` data. Define alinhamento e largura.
+- **Coluna chamada "Ações"** vira coluna de marcação; o menu por linha fica como TODO.
+- **Incluir + Manutenção + Excluir juntos** viram o `btnManut` do grid (edição em linha).
+  Um **"Novo" sozinho** ao lado do grid é botão comum — e é aí que entra a escolha de rotina
+  de destino descrita acima.
+- **Consultar e Limpar** viram o `csw:btnConsultar`, que já desenha os dois.
+- **Confirmar + Cancelar** viram o `btnManter` do cadastro — mas só quando **não** há grid na
+  tela principal; com grid a rotina sai no modo Grid e eles ficam botões comuns (com aviso).

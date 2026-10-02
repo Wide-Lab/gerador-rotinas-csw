@@ -45,7 +45,7 @@
           };
 
           structures.push(structure);
-        } else if (!structure.subscript && subscript) {
+        } else if (!structure.subscript && subscript && structure.variable !== baseVariable) {
           structure.subscript = subscript;
         }
 
@@ -81,8 +81,10 @@
         .map((field) => app.fields.dataVariableFor(field, config))
     );
 
-    return structures.filter((structure) =>
-      scalarVariables.has(structure.variable)
+    return structures.filter(
+      (structure) =>
+        scalarVariables.has(structure.variable) ||
+        (config.routineMode === "crud" && structure.variable === baseVariable)
     );
   }
 
@@ -187,12 +189,101 @@
       .map((field) => {
       const tableVariable = app.fields.multiSelectTableVariable(field);
 
+      const keyDefinitions =
+        config.useTabs && field.tabId && field.tabId !== "parent"
+          ? app.fields
+              .tabKeyDefinitions(config)
+              .filter((definition) => definition.field.tabId === field.tabId)
+          : [];
+
       return {
         field,
         tableVariable,
         parameter: u.toParameter(tableVariable),
-        globalReference: multiSelectGlobalReference(config, field)
+        globalReference: multiSelectGlobalReference(config, field),
+        keyDefinitions,
+        keyed: keyDefinitions.length > 0,
+        obtainMethod: `Obter${config.entityName}${u.toPascal(tableVariable)}`
       };
+    });
+  }
+
+  function keyedMultiSelectDefinitions(config) {
+    return multiSelectDefinitions(config).filter((definition) => definition.keyed);
+  }
+
+  function mainHasData(config) {
+    return app.fields.parentReadingOrder().some(
+      (field) =>
+        !app.fields.isKeyField(field) &&
+        !app.fields.isMultiSelect(field) &&
+        !app.fields.isGridTabField(field)
+    ) || multiSelectDefinitions(config).some((definition) => !definition.keyed);
+  }
+
+  function keyedStructures(config) {
+    return dataStructures(config).filter((structure) => structure.keyDefinitions.length);
+  }
+
+  function deletesByTabKey(config) {
+    return !mainHasData(config) &&
+      (keyedMultiSelectDefinitions(config).length > 0 || keyedStructures(config).length > 0);
+  }
+
+  function deleteTabKeyDefinitions(config) {
+    if (!deletesByTabKey(config)) return [];
+    const seen = new Set();
+    return [
+      ...keyedMultiSelectDefinitions(config).flatMap((definition) => definition.keyDefinitions),
+      ...keyedStructures(config).flatMap((structure) => structure.keyDefinitions)
+    ].filter((definition) => {
+      if (seen.has(definition.parameter)) return false;
+      seen.add(definition.parameter);
+      return true;
+    });
+  }
+
+  function deleteParameters(config) {
+    return unique([
+      ...app.indexes.rgParameters(),
+      ...deleteTabKeyDefinitions(config).map((definition) => definition.parameter)
+    ]);
+  }
+
+  function deleteMacArguments(config) {
+    return [
+      ...app.indexes.macArguments(),
+      ...deleteTabKeyDefinitions(config).map((definition) => definition.variable)
+    ];
+  }
+
+  function appendKeyedMultiSelectObtainMethods(lines, config) {
+    if (!config.generateObtain) return;
+
+    keyedMultiSelectDefinitions(config).forEach((definition) => {
+      const parameters = unique([
+        ...app.indexes.rgParameters(),
+        ...definition.keyDefinitions.map((keyDefinition) => keyDefinition.parameter),
+        definition.parameter
+      ]);
+      const condition = definition.keyDefinitions
+        .map((keyDefinition) => `($get(${keyDefinition.parameter})="")`)
+        .join("!");
+
+      lines.push(`\t; Obter ${u.sanitize(definition.field.description)}`);
+      lines.push("\t;");
+      lines.push(`\t; set sc=$$${definition.obtainMethod}^${config.rgRoutineName}(${parameters.map((parameter) => parameter === definition.parameter ? `.${parameter}` : parameter).join(",")})`);
+      lines.push(`${definition.obtainMethod}(${parameters.join(",")})\t;`);
+      lines.push("\t$$$VAR");
+      lines.push("\t;");
+      lines.push(`\tkill ${definition.parameter}`);
+      lines.push("\t;");
+      lines.push(`\tif ${condition} quit $$$OK`);
+      lines.push("\t;");
+      lines.push(`\tmerge ${definition.parameter}=${definition.globalReference}`);
+      lines.push("\t;");
+      lines.push("\tquit $$$OK");
+      lines.push("\t;");
     });
   }
 
@@ -381,6 +472,7 @@
     });
 
     lines.push("\t;");
+    appendHookLines(lines, ruleHooks().initializeCode);
     lines.push("\tquit $$$OK");
     lines.push("\t;");
   }
@@ -455,11 +547,13 @@
       }
     );
 
-    multiSelectDefinitions(config).forEach((definition) => {
-      lines.push(
-        `\tmerge ${definition.parameter}=${definition.globalReference}`
-      );
-    });
+    multiSelectDefinitions(config)
+      .filter((definition) => !definition.keyed)
+      .forEach((definition) => {
+        lines.push(
+          `\tmerge ${definition.parameter}=${definition.globalReference}`
+        );
+      });
 
     lines.push("\t;");
     lines.push("\tquit $$$OK");
@@ -569,8 +663,11 @@
     lines.push("\t$$$VAR");
     lines.push("\tnew sc");
     lines.push("\t;");
+    const espera =
+      Number(config.lockTimeout) > 0 ? `,${Number(config.lockTimeout)}` : "";
+
     lines.push(
-      `\tif $$$IfLock("+","${global}")`
+      `\tif $$$IfLock("+","${global}"${espera})`
     );
 
     lines.push(
@@ -659,8 +756,15 @@
     );
 
     lines.push("\t$$$VAR");
+    const multiSelects = multiSelectDefinitions(config);
+    const skipContainer =
+      deletesByTabKey(config) ||
+      (!mainHasData(config) && dataStructures(config).some((structure) => structure.subscript && !structure.keyDefinitions.length));
+
     lines.push(
-      "\tnew sc,dataHora,codOperador"
+      multiSelects.length
+        ? "\tnew sc,dataHora,codOperador,codSelecionado,tabGravar"
+        : "\tnew sc,dataHora,codOperador"
     );
     lines.push("\t;");
 
@@ -682,8 +786,17 @@
     );
 
     lines.push("\t;");
+    appendHookLines(lines, ruleHooks().saveCode);
 
     structures.forEach((structure) => {
+      if (
+        skipContainer &&
+        !structure.keyDefinitions.length &&
+        !structure.subscript
+      ) {
+        return;
+      }
+
       const keyCondition =
         structure.keyDefinitions
           .map(
@@ -736,9 +849,20 @@
       lines.push("\t;");
     });
 
-    multiSelectDefinitions(config).forEach((definition) => {
+    multiSelects.forEach((definition) => {
+      const keyCondition = definition.keyDefinitions
+        .map((keyDefinition) => `(${keyDefinition.parameter}'="")`)
+        .join("&");
+
+      lines.push("\tkill tabGravar");
+      lines.push('\tset codSelecionado=""');
       lines.push(
-        `\tdo $$$KillMergeG(${definition.globalReference},${definition.parameter})`
+        `\tfor  set codSelecionado=$order(${definition.parameter}(codSelecionado)) quit:codSelecionado=""  set tabGravar(codSelecionado)=dataHora_Z_codOperador`
+      );
+      lines.push(
+        keyCondition
+          ? `\tif ${keyCondition} do $$$KillMergeG(${definition.globalReference},tabGravar)`
+          : `\tdo $$$KillMergeG(${definition.globalReference},tabGravar)`
       );
       lines.push("\t;");
     });
@@ -757,6 +881,17 @@
     lines.push("\t$$$VAR");
     lines.push("\tnew sc");
     lines.push("\t;");
+
+    const requiredTables = new Set(multiSelects.filter((definition) => definition.field.required).map((definition) => definition.parameter));
+    multiSelects
+      .filter((definition) => requiredTables.has(definition.parameter))
+      .forEach((definition) => {
+        lines.push(
+          `\tif '$data(${definition.parameter}) quit $$$ERROR(10000,"${u.escapeMac(definition.field.description)}: Campo obrigatório!")`
+        );
+      });
+    if (requiredTables.size) lines.push("\t;");
+
     lines.push("\tquit $$$OK");
     lines.push("\t;");
   }
@@ -766,6 +901,11 @@
     config
   ) {
     if (!config.generateDelete) {
+      return;
+    }
+
+    if (deletesByTabKey(config)) {
+      appendDeleteByTabKey(lines, config);
       return;
     }
 
@@ -823,6 +963,122 @@
     );
 
     lines.push("\t;");
+    appendHookLines(lines, ruleHooks().deleteValidation);
+    lines.push("\tquit $$$OK");
+    lines.push("\t;");
+  }
+
+  function ruleHooks() {
+    return (app.state && app.state.ruleHooks) || {};
+  }
+
+  function appendHookLines(lines, source) {
+    lines.push(...u.renderHookLines(source));
+  }
+
+  function appendFieldTabHookMethods(lines) {
+    (app.state.tabs || [])
+      .filter((tab) => tab.contentType !== "grid" && tab.hooks && typeof tab.hooks === "object")
+      .forEach((tab) => appendHookLines(lines, tab.hooks.extraMethods));
+  }
+
+  function duplicateButtons() {
+    return app.customButtons && typeof app.customButtons.all === "function"
+      ? app.customButtons.all().filter((button) => button.actionType === "duplicate")
+      : [];
+  }
+
+  function duplicateDefinition(config) {
+    const parameters = app.indexes.rgParameters();
+    const keyParameter = parameters[parameters.length - 1];
+    if (!keyParameter || !duplicateButtons().length) return null;
+
+    const targetParameter = `${keyParameter}Destino`;
+    const origin = app.indexes.globalReference(config);
+    const lastKey = new RegExp(`([(,])${keyParameter}\\)$`);
+    const target = origin.replace(lastKey, `$1${targetParameter})`);
+    const keyField = app.indexes
+      .keyDefinitions()
+      .map((definition) => definition.field)
+      .filter(Boolean)
+      .pop();
+
+    return {
+      parameters: [...parameters, targetParameter],
+      keyParameter,
+      targetParameter,
+      origin,
+      target,
+      keyDescription: keyField ? keyField.description : keyParameter
+    };
+  }
+
+  function appendDuplicate(lines, config) {
+    const definition = duplicateDefinition(config);
+    if (!definition) return;
+
+    const description = u.escapeMac(definition.keyDescription);
+    const title = u.escapeMac(config.title);
+
+    lines.push(`\t; Duplicar ${u.sanitize(config.title)}`);
+    lines.push("\t;");
+    lines.push(`\t; set sc=$$Duplicar${config.entityName}^${config.rgRoutineName}(${definition.parameters.join(",")})`);
+    lines.push(`Duplicar${config.entityName}(${definition.parameters.join(",")})\t;`);
+    lines.push("\t$$$VAR");
+    lines.push("\t;");
+    lines.push(`\tif $get(${definition.targetParameter})="" quit $$$ERROR(10000,"${description} Destino: Campo obrigatório!")`);
+    lines.push(`\tif ${definition.targetParameter}=${definition.keyParameter} quit $$$ERROR(10000,"${description} Destino igual ao de origem!")`);
+    lines.push(`\tif '$data(${definition.origin}) quit $$$ERROR(10000,"${title} "_${definition.keyParameter}_" não cadastrada!")`);
+    lines.push(`\tif $data(${definition.target}) quit $$$ERROR(10000,"${title} "_${definition.targetParameter}_" já cadastrada!")`);
+    lines.push("\t;");
+    lines.push(`\tdo $$$KillMergeG(${definition.target},${definition.origin})`);
+    lines.push("\t;");
+    lines.push("\tquit $$$OK");
+    lines.push("\t;");
+  }
+
+  function appendDeleteByTabKey(lines, config) {
+    const parameters = deleteParameters(config);
+    const keyDefinitions = deleteTabKeyDefinitions(config);
+    const references = [
+      ...keyedStructures(config).map((structure) => structureGlobalReference(config, structure)),
+      ...keyedMultiSelectDefinitions(config).map((definition) => definition.globalReference)
+    ].filter((reference, position, all) => all.indexOf(reference) === position);
+    const keyText = keyDefinitions.map((definition) => definition.parameter).join(`_"/"_`);
+
+    lines.push(`\t; Excluir ${config.title}`);
+    lines.push("\t;");
+    lines.push(`\t; set sc=$$Excluir${config.entityName}^${config.rgRoutineName}(${parameters.join(",")})`);
+    lines.push(`Excluir${config.entityName}(${parameters.join(",")})\t;`);
+    lines.push("\t$$$VAR");
+    lines.push("\tnew sc");
+    lines.push("\t;");
+    lines.push(`\tset sc=$$ValidarExcluir${config.entityName}(${parameters.join(",")})`);
+    lines.push("\tif $$$ISERR(sc) quit sc");
+    lines.push("\t;");
+    references.forEach((reference) => {
+      lines.push(`\tdo $$$KillG(${reference})`);
+    });
+    lines.push("\t;");
+    lines.push("\tquit $$$OK");
+    lines.push("\t;");
+
+    lines.push(`\t; Validar Excluir ${config.title}`);
+    lines.push("\t;");
+    lines.push(`\t; set sc=$$ValidarExcluir${config.entityName}^${config.rgRoutineName}(${parameters.join(",")})`);
+    lines.push(`ValidarExcluir${config.entityName}(${parameters.join(",")})\t;`);
+    lines.push("\t$$$VAR");
+    lines.push("\t;");
+    keyDefinitions.forEach((definition) => {
+      lines.push(
+        `\tif $get(${definition.parameter})="" quit $$$ERROR(10000,"${u.escapeMac(definition.field.description)}: Campo obrigatório!")`
+      );
+    });
+    lines.push(
+      `\tif ${references.map((reference) => `'$data(${reference})`).join("&")} quit $$$ERROR(10000,"${u.escapeMac(config.title)} "_${keyText}_" não cadastrada!")`
+    );
+    lines.push("\t;");
+    appendHookLines(lines, ruleHooks().deleteValidation);
     lines.push("\tquit $$$OK");
     lines.push("\t;");
   }
@@ -897,9 +1153,14 @@
 
     const indexes = [];
 
-    if (app.indexes.usesRoutineCompany(config)) indexes.push("codEmpresa");
+    const companyIndexed = app.state.globalIndexes.some((index) => index.type === "company");
+    if (app.indexes.usesRoutineCompany(config) && !companyIndexed) indexes.push("codEmpresa");
 
     app.state.globalIndexes.forEach((index) => {
+      if (index.type === "company") {
+        if (app.indexes.usesRoutineCompany(config)) indexes.push("codEmpresa");
+        return;
+      }
       if (index.type === "fixed") {
         indexes.push(String(index.fixedValue || "1").trim() || "1");
         return;
@@ -998,6 +1259,7 @@
       const gridRules = app.grid.generateRulesFor("parent", config);
       const tables = [];
       appendGeneratedTables(tables);
+      appendHookLines(tables, ruleHooks().extraMethods);
 
       if (!tables.length) return gridRules;
 
@@ -1070,6 +1332,11 @@
       config
     );
 
+    appendKeyedMultiSelectObtainMethods(
+      lines,
+      config
+    );
+
     appendLock(
       lines,
       config
@@ -1089,6 +1356,14 @@
       lines,
       config
     );
+
+    appendDuplicate(
+      lines,
+      config
+    );
+
+    appendHookLines(lines, ruleHooks().extraMethods);
+    appendFieldTabHookMethods(lines);
 
     lines.push(
       "\t; Tags CSW"
@@ -1159,6 +1434,10 @@
     dataStructures,
     structureGlobalReference,
     multiSelectDefinitions,
+    keyedMultiSelectDefinitions,
+    deleteParameters,
+    deleteMacArguments,
+    duplicateDefinition,
     multiSelectGlobalReference,
     generateAuxiliary,
     auxiliaryGlobalReference

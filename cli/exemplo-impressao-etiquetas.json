@@ -1,0 +1,231 @@
+{
+  "routine": {
+    "name": "WDOMTESTEPMP110",
+    "title": "Impressão de Etiquetas de ID Produto",
+    "mode": "grid",
+    "useTabs": false,
+    "useRules": true,
+    "rgRoutineName": "WDOMTESTEPMP110RG",
+    "entityName": "EtiquetaProduto",
+    "globalName": "mtempWDOMTESTEPMP110",
+    "dataVariable": "WDOMTESTEPMP110",
+    "useRoutineCompany": true,
+    "useBtnManter": false,
+    "generateSave": false,
+    "width": 108,
+    "height": 28
+  },
+  "fields": [
+    {
+      "id": "tip",
+      "description": "Tipo Documento",
+      "variable": "TIPDOC",
+      "type": "combo",
+      "tabId": "parent",
+      "required": true,
+      "inputSize": 24,
+      "extraVariables": "TABF7DOCUME,TABF7CONTRO",
+      "optionsVariable": "TABTIPDOC",
+      "createOptionsTable": true,
+      "optionsItems": [
+        {
+          "value": "PC",
+          "description": "PC - Pedido de Compra"
+        },
+        {
+          "value": "PV",
+          "description": "PV - Pedido de Venda"
+        },
+        {
+          "value": "NFE",
+          "description": "NFE - Nota Fiscal de Entrada"
+        },
+        {
+          "value": "NFS",
+          "description": "NFS - Nota Fiscal de Saída"
+        },
+        {
+          "value": "OF",
+          "description": "OF - Ordem de Fabricação"
+        },
+        {
+          "value": "OR",
+          "description": "OR - Ordem de Retrabalho"
+        }
+      ],
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 14,
+      "inputColumn": 15,
+      "inputLine": 1
+    },
+    {
+      "id": "dti",
+      "description": "Data Início",
+      "variable": "DATINI",
+      "type": "date",
+      "tabId": "parent",
+      "labelColumn": 44,
+      "labelLine": 1,
+      "labelSize": 10,
+      "inputColumn": 54,
+      "inputLine": 1
+    },
+    {
+      "id": "dtf",
+      "description": "Data Fim",
+      "variable": "DATFIM",
+      "type": "date",
+      "tabId": "parent",
+      "labelColumn": 67,
+      "labelLine": 1,
+      "labelSize": 9,
+      "inputColumn": 76,
+      "inputLine": 1
+    },
+    {
+      "id": "doc",
+      "description": "Documento",
+      "variable": "DOCUME",
+      "type": "integer",
+      "tabId": "parent",
+      "inputSize": 10,
+      "enabledWhen": "TIPDOC'=\"\"",
+      "f7ListLoad": "set sc=$$ObterDocumentosF7^WDOMTESTEPMP110RG(CE,TIPDOC,DATINI,DATFIM,.{table})\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit",
+      "f7ListTitles": "Documento,Itens",
+      "f7ListSizes": "12,20",
+      "valcpCode": "set sc=$$ValidarDocumento^WDOMTESTEPMP110RG(CE,TIPDOC,{reference})\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0",
+      "labelColumn": 1,
+      "labelLine": 2,
+      "labelSize": 14,
+      "inputColumn": 15,
+      "inputLine": 2
+    },
+    {
+      "id": "ctr",
+      "description": "Controle",
+      "variable": "CONTRO",
+      "type": "integer",
+      "tabId": "parent",
+      "inputSize": 10,
+      "enabledWhen": "(\"^OF^OR^\"[(\"^\"_TIPDOC_\"^\"))&(DOCUME=\"\")",
+      "f7Routine": "PMPCOF^CCPMP299",
+      "valcpCode": "set sc=$$ValidarControle^WDOMTESTEPMP110RG(CE,TIPDOC,{reference})\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0",
+      "labelColumn": 44,
+      "labelLine": 2,
+      "labelSize": 10,
+      "inputColumn": 54,
+      "inputLine": 2
+    }
+  ],
+  "indexes": [],
+  "grid": {
+    "location": "parent",
+    "code": 41,
+    "line": 4,
+    "lineAuto": false,
+    "height": 17,
+    "startLine": 5,
+    "endLine": 20,
+    "consultButton": {
+      "enabled": true,
+      "column": 92,
+      "line": 1
+    },
+    "maintenance": true,
+    "allowInsert": false,
+    "allowRemove": false,
+    "maintenanceButtonColumn": 12,
+    "maintenanceButtonLine": 24,
+    "columns": [
+      {
+        "title": "Sel",
+        "type": "check",
+        "width": 3,
+        "variable": "CHKETQ"
+      },
+      {
+        "title": "Tipo",
+        "type": "a",
+        "width": 4,
+        "variable": "TIPLIN",
+        "workPiece": 1
+      },
+      {
+        "title": "Documento",
+        "type": "n",
+        "width": 9,
+        "variable": "DOCLIN",
+        "workPiece": 2
+      },
+      {
+        "title": "Item",
+        "type": "n",
+        "width": 4,
+        "variable": "ITELIN",
+        "workPiece": 3
+      },
+      {
+        "title": "Descrição",
+        "type": "a",
+        "width": 40,
+        "variable": "DESLIN",
+        "workPiece": 4
+      },
+      {
+        "title": "Qtde",
+        "type": "n",
+        "width": 9,
+        "variable": "QTDITE",
+        "workPiece": 5
+      },
+      {
+        "title": "Qtde Etiquetas",
+        "type": "n",
+        "width": 8,
+        "variable": "QTDETQ",
+        "workPiece": 6,
+        "editable": true,
+        "required": true,
+        "valcpCode": "if {reference}'?1.N!({reference}<1) do ME^%CSUTIUD(\"Qtde Etiquetas: informe um número maior que zero!\") quit 0"
+      },
+      {
+        "title": "Qtde da Etiqueta",
+        "type": "n",
+        "width": 9,
+        "variable": "QTDPOR",
+        "displayOnly": true,
+        "displayExpression": "$$QtdePorEtiqueta^WDOMTESTEPMP110RG(qtdite,qtdetq)"
+      },
+      {
+        "title": "Linha",
+        "type": "n",
+        "width": 1,
+        "variable": "LINETQ",
+        "recordKey": true,
+        "editable": false
+      }
+    ]
+  },
+  "buttons": [
+    {
+      "id": "imp",
+      "text": "<u>I</u>mprimir",
+      "buttonId": "btImprimir",
+      "icon": "print",
+      "location": "parent",
+      "actionType": "label",
+      "actionLabel": "3500",
+      "positionMode": "manual",
+      "column": 1,
+      "line": 24,
+      "size": 10,
+      "initialState": 0,
+      "actionCode": "set sc=$$ImprimirEtiquetas^WDOMTESTEPMP110RG(CT,CE)\nif $$$ISERR(sc) do ME^%CSUTICSP(sc) goto 2999\ndo MECABECALHO^%CSW1UTI(\"Etiquetas enviadas para impressão!\")\ngoto 2999"
+    }
+  ],
+  "ruleHooks": {
+    "workGlobalCode": "; Itens dos documentos do tipo conforme o documento, o controle ou o período\nset sc=$$CarregarDocumentos(term,codEmpresa,tipoDocumento,documento,controle,dataInicio,dataFim)",
+    "extraMethods": "; Carregar os itens dos documentos na global de trabalho\n; linha = tipo^documento^item^descrição^qtde^qtdeEtiquetas^controle^produto\n;\n; set sc=$$CarregarDocumentos^WDOMTESTEPMP110RG(term,codEmpresa,tipo,documento,controle,dataInicial,dataFinal)\nCarregarDocumentos(term,codEmpresa,tipo,documento,controle,dataInicial,dataFinal)\t;\n$$$VAR\nnew sc,seq\n;\nif $get(tipo)=\"\" quit $$$ERROR(10000,\"Tipo de Documento: Campo obrigatório!\")\nif $get(documento)=\"\",$get(controle)=\"\",($get(dataInicial)=\"\"!($get(dataFinal)=\"\")) quit $$$ERROR(10000,\"Informe o Documento, o Controle ou o período!\")\n;\nset sc=$$$OK,seq=0\nif tipo=\"PC\" set sc=$$CarregarPedidoCompra(term,codEmpresa,documento,dataInicial,dataFinal,.seq)\nif tipo=\"PV\" set sc=$$CarregarPedidoVenda(term,codEmpresa,documento,dataInicial,dataFinal,.seq)\nif tipo=\"NFE\" set sc=$$CarregarNotaEntrada(term,codEmpresa,documento,dataInicial,dataFinal,.seq)\nif tipo=\"NFS\" set sc=$$CarregarNotaSaida(term,codEmpresa,documento,dataInicial,dataFinal,.seq)\nif tipo=\"OF\" set sc=$$CarregarOrdemFabricacao(term,codEmpresa,documento,controle,dataInicial,dataFinal,.seq)\nif tipo=\"OR\" set sc=$$CarregarOrdemRetrabalho(term,codEmpresa,documento,controle,dataInicial,dataFinal,.seq)\n;\nquit sc\n;\n; Data dentro do período informado (período vazio = qualquer data)\n;\n; if $$DentroPeriodo^WDOMTESTEPMP110RG(data,dataInicial,dataFinal)\nDentroPeriodo(data,dataInicial,dataFinal)\t;\n$$$VAR\n;\nset data=$piece($piece($get(data),\";\"),\",\")\nif $get(dataInicial)'=\"\",(data=\"\"!(data<dataInicial)) quit 0\nif $get(dataFinal)'=\"\",(data=\"\"!(data>dataFinal)) quit 0\n;\nquit 1\n;\n; Incluir um item na global de trabalho (sugere 1 etiqueta com a quantidade total)\n;\n; set sc=$$IncluirItem^WDOMTESTEPMP110RG(term,codEmpresa,tipo,documento,item,codProduto,quantidade,controle,.seq)\nIncluirItem(term,codEmpresa,tipo,documento,item,codProduto,quantidade,controle,seq)\t;\n$$$VAR\nnew sc,cgigen,linha\n;\nset sc=$$VerItemCGIGEN^CCCGIRG001(codEmpresa,codProduto,.cgigen)\nset seq=seq+1\nset linha=tipo_Z_documento_Z_item_Z_codProduto_\" - \"_$piece($get(cgigen),Z,1)\nset linha=linha_Z_+quantidade_Z_1_Z_$get(controle)_Z_codProduto\n;\nquit $$GravarGlobalTrabalho(term,seq,linha)\n;\n; Quantidade por etiqueta = quantidade do item / quantidade de etiquetas\n;\n; set qtde=$$QtdePorEtiqueta^WDOMTESTEPMP110RG(quantidade,qtdEtiquetas)\nQtdePorEtiqueta(quantidade,qtdEtiquetas)\t;\n$$$VAR\n;\nif +$get(qtdEtiquetas)<1 quit \"\"\n;\nquit +$fnumber(+$get(quantidade)/qtdEtiquetas,\"\",3)\n;\n; PC - Pedido de Compra: ^ESSPDC(emp,ped) capa (2 emissão); itens (1 produto, 2 quantidade x1000)\n;\n; set sc=$$CarregarPedidoCompra^WDOMTESTEPMP110RG(term,codEmpresa,documento,dataInicial,dataFinal,.seq)\nCarregarPedidoCompra(term,codEmpresa,documento,dataInicial,dataFinal,seq)\t;\n$$$VAR\nnew sc,codPedido\n;\nif $get(documento)'=\"\" quit $$CarregarItensPedidoCompra(term,codEmpresa,documento,dataInicial,dataFinal,.seq)\n;\nset sc=$$$OK,codPedido=\"\"\nfor  set codPedido=$order(^ESSPDC(codEmpresa,codPedido)) quit:codPedido=\"\"!$$$ISERR(sc)  do\n. set sc=$$CarregarItensPedidoCompra(term,codEmpresa,codPedido,dataInicial,dataFinal,.seq)\n;\nquit sc\n;\nCarregarItensPedidoCompra(term,codEmpresa,codPedido,dataInicial,dataFinal,seq)\t;\n$$$VAR\nnew sc,esspdc,item,esspdci\n;\nset esspdc=$get(^ESSPDC(codEmpresa,codPedido))\nif esspdc=\"\" quit $$$OK\nif '$$DentroPeriodo($piece(esspdc,Z,2),dataInicial,dataFinal) quit $$$OK\n;\nset sc=$$$OK,item=\"\"\nfor  set item=$order(^ESSPDC(codEmpresa,codPedido,item)) quit:item=\"\"!$$$ISERR(sc)  do\n. quit:item'=+item\n. set esspdci=$get(^ESSPDC(codEmpresa,codPedido,item))\n. quit:$piece(esspdci,Z,1)=\"\"\n. set sc=$$IncluirItem(term,codEmpresa,\"PC\",codPedido,item,$piece(esspdci,Z,1),$piece(esspdci,Z,2)/1000,\"\",.seq)\n;\nquit sc\n;\n; PV - Pedido de Venda: ^PVPD(emp,ped) capa; ^PVBPDD(emp,dataDigitação,ped) por período\n;\n; set sc=$$CarregarPedidoVenda^WDOMTESTEPMP110RG(term,codEmpresa,documento,dataInicial,dataFinal,.seq)\nCarregarPedidoVenda(term,codEmpresa,documento,dataInicial,dataFinal,seq)\t;\n$$$VAR\nnew sc,data,codPedido\n;\nif $get(documento)'=\"\" quit $$CarregarItensPedidoVenda(term,codEmpresa,documento,.seq)\n;\nset sc=$$$OK,data=dataInicial-1\nfor  set data=$order(^PVBPDD(codEmpresa,data)) quit:data=\"\"!(data>dataFinal)!$$$ISERR(sc)  do\n. set codPedido=\"\"\n. for  set codPedido=$order(^PVBPDD(codEmpresa,data,codPedido)) quit:codPedido=\"\"!$$$ISERR(sc)  do\n. . set sc=$$CarregarItensPedidoVenda(term,codEmpresa,codPedido,.seq)\n;\nquit sc\n;\nCarregarItensPedidoVenda(term,codEmpresa,codPedido,seq)\t;\n$$$VAR\nnew sc,pvpd,item\n;\nset sc=$$VerPedido^CCPVRG001(codEmpresa,codPedido,,.pvpd)\nif $$$ISERR(sc) quit sc\n;\nset item=\"\"\nfor  set item=$order(^PVPD(codEmpresa,codPedido,item)) quit:item=\"\"!$$$ISERR(sc)  do\n. quit:item'=+item\n. set sc=$$VerPedido^CCPVRG001(codEmpresa,codPedido,item,.pvpd)\n. quit:$$$ISERR(sc)!($piece(pvpd,Z,1)=\"\")\n. set sc=$$IncluirItem(term,codEmpresa,\"PV\",codPedido,item,$piece(pvpd,Z,1),$piece(pvpd,Z,2)/1000,\"\",.seq)\n;\nquit sc\n;\n; NFE - Nota Fiscal de Entrada: ^ESENFE(emp,dataEntrada,fornecedor,série,nota[,item])\n;\n; set sc=$$CarregarNotaEntrada^WDOMTESTEPMP110RG(term,codEmpresa,documento,dataInicial,dataFinal,.seq)\nCarregarNotaEntrada(term,codEmpresa,documento,dataInicial,dataFinal,seq)\t;\n$$$VAR\nnew sc,data,codFornecedor,codSerie,codNota,item,esenfei\n;\nset sc=$$$OK,data=$select($get(dataInicial)'=\"\":dataInicial-1,1:\"\")\nfor  set data=$order(^ESENFE(codEmpresa,data)) quit:data=\"\"!($get(dataFinal)'=\"\"&(data>dataFinal))!$$$ISERR(sc)  do\n. set codFornecedor=\"\"\n. for  set codFornecedor=$order(^ESENFE(codEmpresa,data,codFornecedor)) quit:codFornecedor=\"\"!$$$ISERR(sc)  do\n. . set codSerie=\"\"\n. . for  set codSerie=$order(^ESENFE(codEmpresa,data,codFornecedor,codSerie)) quit:codSerie=\"\"!$$$ISERR(sc)  do\n. . . set codNota=\"\"\n. . . for  set codNota=$order(^ESENFE(codEmpresa,data,codFornecedor,codSerie,codNota)) quit:codNota=\"\"!$$$ISERR(sc)  do\n. . . . quit:$get(documento)'=\"\"&(codNota'=documento)\n. . . . set item=\"\"\n. . . . for  set item=$order(^ESENFE(codEmpresa,data,codFornecedor,codSerie,codNota,item)) quit:item=\"\"!$$$ISERR(sc)  do\n. . . . . quit:item'=+item\n. . . . . set esenfei=$get(^ESENFE(codEmpresa,data,codFornecedor,codSerie,codNota,item))\n. . . . . quit:$piece(esenfei,Z,1)=\"\"\n. . . . . set sc=$$IncluirItem(term,codEmpresa,\"NFE\",codNota,item,$piece(esenfei,Z,1),$piece(esenfei,Z,2)/1000,\"\",.seq)\n;\nquit sc\n;\n; NFS - Nota Fiscal de Saída: ^FTNF(emp,dataEmissão,nota[,item])\n;\n; set sc=$$CarregarNotaSaida^WDOMTESTEPMP110RG(term,codEmpresa,documento,dataInicial,dataFinal,.seq)\nCarregarNotaSaida(term,codEmpresa,documento,dataInicial,dataFinal,seq)\t;\n$$$VAR\nnew sc,data,codNota,item,ftnfi\n;\nset sc=$$$OK,data=$select($get(dataInicial)'=\"\":dataInicial-1,1:\"\")\nfor  set data=$order(^FTNF(codEmpresa,data)) quit:data=\"\"!($get(dataFinal)'=\"\"&(data>dataFinal))!$$$ISERR(sc)  do\n. set codNota=\"\"\n. for  set codNota=$order(^FTNF(codEmpresa,data,codNota)) quit:codNota=\"\"!$$$ISERR(sc)  do\n. . quit:$get(documento)'=\"\"&(codNota'=documento)\n. . set item=\"\"\n. . for  set item=$order(^FTNF(codEmpresa,data,codNota,item)) quit:item=\"\"!$$$ISERR(sc)  do\n. . . quit:item'=+item\n. . . set sc=$$VerNotaFiscal^CCFTRG001(codEmpresa,data,codNota,item,.ftnfi)\n. . . quit:$$$ISERR(sc)!($piece(ftnfi,Z,1)=\"\")\n. . . set sc=$$IncluirItem(term,codEmpresa,\"NFS\",codNota,item,$piece(ftnfi,Z,1),$piece(ftnfi,Z,2)/1000,\"\",.seq)\n;\nquit sc\n;\n; OF - Ordem de Fabricação: ^PMPORF(emp,of) (1 início, 3 engenharia, 4 programada, 14 controle)\n; Por controle: ^PMPCOF(emp,controle,of); por período: ^PMPOFD(emp,dataInício,of)\n;\n; set sc=$$CarregarOrdemFabricacao^WDOMTESTEPMP110RG(term,codEmpresa,documento,controle,dataInicial,dataFinal,.seq)\nCarregarOrdemFabricacao(term,codEmpresa,documento,controle,dataInicial,dataFinal,seq)\t;\n$$$VAR\nnew sc,codOF,data\n;\nif $get(documento)'=\"\" quit $$IncluirOrdemFabricacao(term,codEmpresa,documento,.seq)\n;\nset sc=$$$OK,codOF=\"\"\nif $get(controle)'=\"\" do  quit sc\n. for  set codOF=$order(^PMPCOF(codEmpresa,controle,codOF)) quit:codOF=\"\"!$$$ISERR(sc)  do\n. . set sc=$$IncluirOrdemFabricacao(term,codEmpresa,codOF,.seq)\n;\nset data=dataInicial-1\nfor  set data=$order(^PMPOFD(codEmpresa,data)) quit:data=\"\"!(data>dataFinal)!$$$ISERR(sc)  do\n. set codOF=\"\"\n. for  set codOF=$order(^PMPOFD(codEmpresa,data,codOF)) quit:codOF=\"\"!$$$ISERR(sc)  do\n. . set sc=$$IncluirOrdemFabricacao(term,codEmpresa,codOF,.seq)\n;\nquit sc\n;\nIncluirOrdemFabricacao(term,codEmpresa,codOF,seq)\t;\n$$$VAR\nnew sc,pmporf,decimais,diviso\n;\nset sc=$$VerOF^CCPMPRG001(codEmpresa,codOF,.pmporf)\nif $$$ISERR(sc) quit sc\nset sc=$$VerNumeroDecimaisOF^CCPGARG001(codEmpresa,.decimais,.diviso)\nif $$$ISERR(sc) quit sc\n;\nquit $$IncluirItem(term,codEmpresa,\"OF\",codOF,1,$$ObterCodItem^CCCGIRG003(codEmpresa,$piece(pmporf,Z,3)),$piece(pmporf,Z,4)/diviso,$piece(pmporf,Z,14),.seq)\n;\n; OR - Ordem de Retrabalho: ^PMRORR(emp,or) (1 controle, 2 início, 6 engenharia, 7 a recuperar)\n; Por controle: ^PMRORC(emp,controle,or); por período: ^PMRORD(emp,dataInício,or)\n;\n; set sc=$$CarregarOrdemRetrabalho^WDOMTESTEPMP110RG(term,codEmpresa,documento,controle,dataInicial,dataFinal,.seq)\nCarregarOrdemRetrabalho(term,codEmpresa,documento,controle,dataInicial,dataFinal,seq)\t;\n$$$VAR\nnew sc,codOR,data\n;\nif $get(documento)'=\"\" quit $$IncluirOrdemRetrabalho(term,codEmpresa,documento,.seq)\n;\nset sc=$$$OK,codOR=\"\"\nif $get(controle)'=\"\" do  quit sc\n. for  set codOR=$order(^PMRORC(codEmpresa,controle,codOR)) quit:codOR=\"\"!$$$ISERR(sc)  do\n. . set sc=$$IncluirOrdemRetrabalho(term,codEmpresa,codOR,.seq)\n;\nset data=dataInicial-1\nfor  set data=$order(^PMRORD(codEmpresa,data)) quit:data=\"\"!(data>dataFinal)!$$$ISERR(sc)  do\n. set codOR=\"\"\n. for  set codOR=$order(^PMRORD(codEmpresa,data,codOR)) quit:codOR=\"\"!$$$ISERR(sc)  do\n. . set sc=$$IncluirOrdemRetrabalho(term,codEmpresa,codOR,.seq)\n;\nquit sc\n;\nIncluirOrdemRetrabalho(term,codEmpresa,codOR,seq)\t;\n$$$VAR\nnew sc,pmrorr,decimais,diviso\n;\nset sc=$$VerOR^CCPMRRG001(codEmpresa,codOR,.pmrorr)\nif $$$ISERR(sc) quit sc\nset sc=$$VerNumeroDecimaisOF^CCPGARG001(codEmpresa,.decimais,.diviso)\nif $$$ISERR(sc) quit sc\n;\nquit $$IncluirItem(term,codEmpresa,\"OR\",codOR,1,$$ObterCodItem^CCCGIRG003(codEmpresa,$piece(pmrorr,Z,6)),$piece(pmrorr,Z,7)/diviso,$piece(pmrorr,Z,1),.seq)\n;\n; Validar o documento informado conforme o tipo\n;\n; set sc=$$ValidarDocumento^WDOMTESTEPMP110RG(codEmpresa,tipo,documento)\nValidarDocumento(codEmpresa,tipo,documento)\t;\n$$$VAR\nnew sc,dados\n;\nif $get(documento)=\"\" quit $$$OK\nif tipo=\"PC\",'$data(^ESSPDC(codEmpresa,documento)) quit $$$ERROR(10000,\"Pedido de compra \"_documento_\" não cadastrado!\")\nif tipo=\"PV\" quit $$VerPedido^CCPVRG001(codEmpresa,documento,,.dados)\nif tipo=\"OF\" quit $$VerOF^CCPMPRG001(codEmpresa,documento,.dados)\nif tipo=\"OR\" quit $$VerOR^CCPMRRG001(codEmpresa,documento,.dados)\n;\nquit $$$OK\n;\n; Validar o controle (OF: ^PMPCOF/^PMPOBC; OR: ^PMRORC)\n;\n; set sc=$$ValidarControle^WDOMTESTEPMP110RG(codEmpresa,tipo,controle)\nValidarControle(codEmpresa,tipo,controle)\t;\n$$$VAR\n;\nif $get(controle)=\"\" quit $$$OK\nif tipo=\"OF\",'$data(^PMPCOF(codEmpresa,controle)),'$data(^PMPOBC(codEmpresa,controle)) quit $$$ERROR(10000,\"Controle \"_controle_\" sem ordens de fabricação!\")\nif tipo=\"OR\",'$data(^PMRORC(codEmpresa,controle)) quit $$$ERROR(10000,\"Controle \"_controle_\" sem ordens de retrabalho!\")\n;\nquit $$$OK\n;\n; F7 do Documento: documentos do tipo no período (tabela(documento)=descrição)\n;\n; set sc=$$ObterDocumentosF7^WDOMTESTEPMP110RG(codEmpresa,tipo,dataInicial,dataFinal,.tabela)\nObterDocumentosF7(codEmpresa,tipo,dataInicial,dataFinal,tabela)\t;\n$$$VAR\nnew sc,term,seq,linha,quantidade\n;\nkill tabela\nif $get(tipo)=\"\" quit $$$ERROR(10000,\"Informe o Tipo de Documento!\")\nif $get(dataInicial)=\"\"!($get(dataFinal)=\"\") quit $$$ERROR(10000,\"Informe o período para consultar os documentos!\")\n;\nset term=$job_\"F7\"\nkill ^mtempWDOMTESTEPMP110(term)\nset sc=$$CarregarDocumentos(term,codEmpresa,tipo,\"\",\"\",dataInicial,dataFinal)\nset seq=\"\"\nfor  set seq=$order(^mtempWDOMTESTEPMP110(term,seq)) quit:seq=\"\"  do\n. set linha=^mtempWDOMTESTEPMP110(term,seq)\n. set quantidade=$get(tabela($piece(linha,Z,2)))+1\n. set tabela($piece(linha,Z,2))=quantidade_\" item(ns)\"\nkill ^mtempWDOMTESTEPMP110(term)\n;\nquit sc\n;\n; Imprimir as etiquetas das linhas marcadas (lote pelo PrintTagList)\n;\n; set sc=$$ImprimirEtiquetas^WDOMTESTEPMP110RG(term,codEmpresa)\nImprimirEtiquetas(term,codEmpresa)\t;\n$$$VAR\nnew sc,seq,linha,tabParametro,tabError,quantidade\n;\nkill tabParametro\nset seq=\"\",quantidade=0\nfor  set seq=$order(^mtempWDOMTESTEPMP110CHECK(term,41,1,seq)) quit:seq=\"\"  do\n. set linha=$get(^mtempWDOMTESTEPMP110(term,seq))\n. quit:linha=\"\"\n. if +$piece(linha,Z,6)<1 quit\n. set quantidade=quantidade+1\n. set tabParametro(quantidade)=codEmpresa_Z_linha\nif 'quantidade quit $$$ERROR(10000,\"Selecione os itens para imprimir!\")\n;\nquit $$PrintTagList^%CSW1TAG(\"EtiquetaIdProduto\",.tabParametro,.tabError)\n;\n; Regra do PrintTagList: uma etiqueta por cópia de cada item selecionado\n; tabParametro(n) = empresa^tipo^documento^item^descrição^qtde^qtdeEtiquetas^controle^produto\n;\n; do ObterDadosEtiqueta^WDOMTESTEPMP110RG(.tabParametro,.tabEtiqueta)\nObterDadosEtiqueta(tabParametro,tabEtiqueta)\t;\n$$$VAR\nnew n,i,seq,linha,qtdEtiquetas\n;\nkill tabEtiqueta\nset (n,seq)=\"\"\nfor  set n=$order(tabParametro(n)) quit:n=\"\"  do\n. set linha=tabParametro(n)\n. set qtdEtiquetas=+$piece(linha,Z,7)\n. for i=1:1:qtdEtiquetas do\n. . set seq=seq+1\n. . set tabEtiqueta(seq)=\"EtiquetaIdProduto\"\n. . set tabEtiqueta(seq,1,\"tipoDocumento\")=$piece(linha,Z,2)\n. . set tabEtiqueta(seq,1,\"documento\")=$piece(linha,Z,3)\n. . set tabEtiqueta(seq,1,\"item\")=$piece(linha,Z,4)\n. . set tabEtiqueta(seq,1,\"codProduto\")=$piece(linha,Z,9)\n. . set tabEtiqueta(seq,1,\"descProduto\")=$extract($piece($piece(linha,Z,5),\" - \",2,99),1,40)\n. . set tabEtiqueta(seq,1,\"quantidade\")=$$QtdePorEtiqueta($piece(linha,Z,6),qtdEtiquetas)\n. . set tabEtiqueta(seq,1,\"controle\")=$piece(linha,Z,8)\n. . set tabEtiqueta(seq,1,\"etiqueta\")=i_\"/\"_qtdEtiquetas\n;\nquit"
+  }
+}

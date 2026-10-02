@@ -167,6 +167,7 @@
       addRoutines(files, conflicts, rules, "rg");
     }
 
+
     return {
       files: [...files.values()],
       conflicts: [...new Set(conflicts)]
@@ -485,7 +486,7 @@
       app.el.saveInterfaceFiles,
       app.el.saveRuleFiles,
       app.el.overwriteGeneratedFiles
-    ].forEach((input) => {
+    ].filter(Boolean).forEach((input) => {
       input.addEventListener("change", () => {
         if (input === app.el.overwriteGeneratedFiles) {
           input.dataset.userChanged = "1";
@@ -503,11 +504,53 @@
     await updateFolderDisplay();
   }
 
+  async function rememberHandle(key, handle) {
+    try {
+      const database = await openDatabase();
+      if (!database) return;
+
+      await new Promise((resolve, reject) => {
+        const transaction = database.transaction(STORE_NAME, "readwrite");
+        transaction.objectStore(STORE_NAME).put(handle, key);
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+      });
+
+      database.close();
+    } catch {
+      /* sem persistência: a escolha vale só para esta sessão */
+    }
+  }
+
+  async function recallHandle(key) {
+    try {
+      const database = await openDatabase();
+      if (!database) return null;
+
+      const handle = await new Promise((resolve, reject) => {
+        const transaction = database.transaction(STORE_NAME, "readonly");
+        const request = transaction.objectStore(STORE_NAME).get(key);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+      });
+
+      database.close();
+      return handle;
+    } catch {
+      return null;
+    }
+  }
+
   app.files = {
     initialize,
     selectDirectory,
     saveGeneratedFiles,
     collectGeneratedFiles,
-    updateSummary
+    updateSummary,
+    supportsDirectoryAccess,
+    requestWritePermission,
+    rememberHandle,
+    recallHandle,
+    outputDirectory: () => outputDirectoryHandle
   };
 })(window.GeradorRotinasJsonPadrao);

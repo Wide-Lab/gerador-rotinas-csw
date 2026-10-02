@@ -1,0 +1,138 @@
+{
+  "routine": {
+    "name": "WDOMTESTEROM005",
+    "title": "Cadastro de Embalagem",
+    "mode": "crud",
+    "useTabs": false,
+    "useRules": true,
+    "rgRoutineName": "WDOMTESTEROM005RG",
+    "entityName": "Embalagem",
+    "globalName": "WDOMTESTEROMTAB",
+    "dataVariable": "WDOMTESTEROMTAB",
+    "useRoutineCompany": true,
+    "useBtnManter": true,
+    "btnManterLine": 8,
+    "btnManterColumn": 14,
+    "generateSaveAnother": false,
+    "generateDelete": true,
+    "width": 60,
+    "height": 11
+  },
+  "fields": [
+    {
+      "id": "emb",
+      "description": "Embalagem",
+      "variable": "CODEMB",
+      "type": "integer",
+      "tabId": "parent",
+      "isKey": true,
+      "inputSize": 8,
+      "lookupPreset": "custom",
+      "f7ListLoad": "set sc=$$ObterTabEmbalagem^WDOMTESTEROM005RG(CE,.{table})",
+      "f7ListTitles": "Embalagem,Descrição,Peso Neto (kg)",
+      "f7ListSizes": "8,35,12",
+      "valcpCode": "if {reference}=\"\" set sc=$$ObterProximaEmbalagem^WDOMTESTEROM005RG(CE,.{reference}) if $$$ISERR(sc) do ME^%CSUTICSP(sc) quit 0\ndo Set^%CSW1UTI(%PRG,\"cp{label}\",{reference})",
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 12,
+      "inputColumn": 14,
+      "inputLine": 1
+    },
+    {
+      "id": "des",
+      "description": "Descrição",
+      "variable": "DESEMB",
+      "type": "string",
+      "tabId": "parent",
+      "required": true,
+      "inputSize": 40,
+      "piece": 3,
+      "labelColumn": 1,
+      "labelLine": 2,
+      "labelSize": 12,
+      "inputColumn": 14,
+      "inputLine": 2
+    },
+    {
+      "id": "pes",
+      "description": "Peso Neto (kg)",
+      "variable": "PESEMB",
+      "type": "float",
+      "tabId": "parent",
+      "required": true,
+      "inputSize": 10,
+      "piece": 4,
+      "labelColumn": 1,
+      "labelLine": 3,
+      "labelSize": 12,
+      "inputColumn": 14,
+      "inputLine": 3
+    },
+    {
+      "id": "alt",
+      "description": "Altura",
+      "variable": "ALTEMB",
+      "type": "float",
+      "tabId": "parent",
+      "required": true,
+      "inputSize": 10,
+      "piece": 5,
+      "labelColumn": 1,
+      "labelLine": 4,
+      "labelSize": 12,
+      "inputColumn": 14,
+      "inputLine": 4
+    },
+    {
+      "id": "lar",
+      "description": "Largura",
+      "variable": "LAREMB",
+      "type": "float",
+      "tabId": "parent",
+      "required": true,
+      "inputSize": 10,
+      "piece": 6,
+      "labelColumn": 1,
+      "labelLine": 5,
+      "labelSize": 12,
+      "inputColumn": 14,
+      "inputLine": 5
+    },
+    {
+      "id": "pro",
+      "description": "Profundidade",
+      "variable": "PROEMB",
+      "type": "float",
+      "tabId": "parent",
+      "required": true,
+      "inputSize": 10,
+      "piece": 7,
+      "labelColumn": 1,
+      "labelLine": 6,
+      "labelSize": 12,
+      "inputColumn": 14,
+      "inputLine": 6
+    }
+  ],
+  "indexes": [
+    {
+      "type": "fixed",
+      "fixedValue": "1"
+    },
+    {
+      "type": "company"
+    },
+    {
+      "type": "fixed",
+      "fixedValue": "1"
+    },
+    {
+      "type": "key",
+      "fieldId": "emb",
+      "parameterName": "codEmbalagem"
+    }
+  ],
+  "ruleHooks": {
+    "extraMethods": "; Obter Próximo Código da Embalagem (não reaproveita)\n;\n; set sc=$$ObterProximaEmbalagem^WDOMTESTEROM005RG(codEmpresa,.codEmbalagem)\nObterProximaEmbalagem(codEmpresa,codEmbalagem)\t;\n$$$VAR\n;\nset codEmbalagem=$increment(^WDOMTESTEROMTAB(1,codEmpresa,0))\n;\nquit $$$OK\n;\n; Obter Tabela de Embalagens (F7 de cadastrados)\n;\n; set sc=$$ObterTabEmbalagem^WDOMTESTEROM005RG(codEmpresa,.tabEmbalagem)\nObterTabEmbalagem(codEmpresa,tabEmbalagem)\t;\n$$$VAR\nnew codEmbalagem,dados\n;\nkill tabEmbalagem\nset codEmbalagem=\"\"\nfor  set codEmbalagem=$order(^WDOMTESTEROMTAB(1,codEmpresa,1,codEmbalagem)) quit:codEmbalagem=\"\"  do\n. set dados=$get(^WDOMTESTEROMTAB(1,codEmpresa,1,codEmbalagem))\n. set tabEmbalagem(codEmbalagem)=$piece(dados,Z,3)_Z_$piece(dados,Z,4)\n;\nquit $$$OK\n;\n; Ver Embalagem (descrição^peso^altura^largura^profundidade)\n;\n; set sc=$$VerEmbalagem^WDOMTESTEROM005RG(codEmpresa,codEmbalagem,.embalagem)\nVerEmbalagem(codEmpresa,codEmbalagem,embalagem)\t;\n$$$VAR\nnew dados\n;\nset embalagem=\"\"\nif $get(codEmbalagem)=\"\" quit $$$ERROR(10000,\"Embalagem: Campo obrigatório!\")\nif '$data(^WDOMTESTEROMTAB(1,codEmpresa,1,codEmbalagem)) quit $$$ERROR(10000,\"Embalagem \"_codEmbalagem_\" não cadastrada!\")\n;\nset dados=$get(^WDOMTESTEROMTAB(1,codEmpresa,1,codEmbalagem))\nset embalagem=$piece(dados,Z,3,7)\n;\nquit $$$OK"
+  }
+}

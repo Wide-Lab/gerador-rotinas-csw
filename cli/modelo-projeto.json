@@ -1,0 +1,270 @@
+{
+  "routine": {
+    "name": "WDCCMOT010A",
+    "title": "Cadastro de Motivo de Parada",
+    "mode": "crud",
+    "dataVariable": "WDCCMOT0",
+    "useTabs": true,
+    "useRules": true,
+    "rgRoutineName": "WDCCMOT010ARG",
+    "entityName": "Cadastro de Motivo de Parada",
+    "globalName": "WDCCMOTPAR",
+    "width": 108,
+    "height": 28
+  },
+  "tabs": [
+    {
+      "id": "aba1",
+      "title": "Dados Gerais",
+      "routineName": "WDCCMOT010ATAB1",
+      "gridRgRoutineName": "WDCCMOT010ATAB1RG",
+      "dataVariable": "WDCCMOT0DADGER",
+      "globalSubscript": "4",
+      "contentType": "fields"
+    },
+    {
+      "id": "aba2",
+      "title": "Setores",
+      "routineName": "WDCCMOT010ATAB2",
+      "gridRgRoutineName": "WDCCMOT010ATAB2RG",
+      "dataVariable": "WDCCMOT0SET",
+      "globalSubscript": "5",
+      "contentType": "grid"
+    },
+    {
+      "id": "aba3",
+      "title": "Observações",
+      "routineName": "WDCCMOT010ATAB3",
+      "gridRgRoutineName": "WDCCMOT010ATAB3RG",
+      "dataVariable": "WDCCMOT0OBS",
+      "globalSubscript": "6",
+      "contentType": "fields"
+    }
+  ],
+  "fields": [
+    {
+      "description": "Código da Empresa",
+      "variable": "CODEMP",
+      "type": "integer",
+      "tabId": "parent",
+      "isKey": true,
+      "required": true,
+      "inputSize": 4,
+      "lookupPreset": "empresa",
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 15,
+      "inputColumn": 17,
+      "inputLine": 1,
+      "displayLine": 1,
+      "displayColumn": 23,
+      "displaySize": 30,
+      "hasDisplay": true
+    },
+    {
+      "description": "Código do Motivo",
+      "variable": "CODMOT",
+      "type": "integer",
+      "tabId": "parent",
+      "isKey": true,
+      "required": true,
+      "inputSize": 6,
+      "lookupPreset": "none",
+      "labelColumn": 1,
+      "labelLine": 2,
+      "labelSize": 15,
+      "inputColumn": 17,
+      "inputLine": 2,
+      "displayLine": 2,
+      "displayColumn": 25,
+      "displaySize": 30,
+      "hasDisplay": false
+    },
+    {
+      "description": "Descrição",
+      "variable": "DESC",
+      "type": "string",
+      "tabId": "aba1",
+      "isKey": false,
+      "required": true,
+      "inputSize": 45,
+      "lookupPreset": "none",
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 14,
+      "inputColumn": 16,
+      "inputLine": 1,
+      "displayLine": 1,
+      "displayColumn": 63,
+      "displaySize": 30,
+      "hasDisplay": false
+    },
+    {
+      "description": "Data do Cadastro",
+      "variable": "DATCAD",
+      "type": "date",
+      "tabId": "aba1",
+      "isKey": false,
+      "required": true,
+      "inputSize": 8,
+      "lookupPreset": "none",
+      "labelColumn": 1,
+      "labelLine": 2,
+      "labelSize": 14,
+      "inputColumn": 16,
+      "inputLine": 2,
+      "displayLine": 2,
+      "displayColumn": 26,
+      "displaySize": 30,
+      "hasDisplay": false
+    },
+    {
+      "description": "Tempo Padrão",
+      "variable": "TEMPAD",
+      "type": "decimal",
+      "tabId": "aba1",
+      "isKey": false,
+      "required": false,
+      "inputSize": 8,
+      "lookupPreset": "none",
+      "decimalFormat": "v2",
+      "labelColumn": 1,
+      "labelLine": 3,
+      "labelSize": 14,
+      "inputColumn": 16,
+      "inputLine": 3,
+      "displayLine": 3,
+      "displayColumn": 26,
+      "displaySize": 30,
+      "hasDisplay": false
+    },
+    {
+      "description": "Situação",
+      "variable": "SIT",
+      "type": "combo",
+      "tabId": "aba1",
+      "isKey": false,
+      "required": true,
+      "inputSize": 10,
+      "lookupPreset": "none",
+      "optionsVariable": "TABSIT",
+      "optionsItems": [
+        {
+          "id": "60b3cbc7-20d3-4037-be96-7bbd75dd761f",
+          "value": "0",
+          "description": "Inativo"
+        },
+        {
+          "id": "e6ec4980-ccdd-4b91-9f0b-165bc3e3ae9d",
+          "value": "1",
+          "description": "Ativo"
+        }
+      ],
+      "labelColumn": 1,
+      "labelLine": 4,
+      "labelSize": 14,
+      "inputColumn": 16,
+      "inputLine": 4,
+      "displayLine": 4,
+      "displayColumn": 28,
+      "displaySize": 30,
+      "hasDisplay": false
+    },
+    {
+      "description": "Observação Geral",
+      "variable": "OBSGER",
+      "type": "textArea",
+      "tabId": "aba3",
+      "isKey": false,
+      "required": false,
+      "inputSize": 60,
+      "lookupPreset": "none",
+      "textAreaMaxLength": 200,
+      "textAreaWidth": 60,
+      "textAreaHeight": 3,
+      "labelColumn": 1,
+      "labelLine": 1,
+      "labelSize": 14,
+      "inputColumn": 16,
+      "inputLine": 1,
+      "displayLine": 1,
+      "displayColumn": 78,
+      "displaySize": 30,
+      "hasDisplay": false
+    }
+  ],
+  "grids": [
+    {
+      "location": "aba2",
+      "gridCode": 42,
+      "columns": [
+        {
+          "title": "Coluna",
+          "variable": "COL",
+          "type": "string",
+          "width": 30,
+          "workPiece": 1,
+          "recordKey": true,
+          "detail": true
+        },
+        {
+          "title": "Setor",
+          "variable": "SET",
+          "type": "integer",
+          "width": 6,
+          "workPiece": 2,
+          "recordKey": false,
+          "detail": true
+        },
+        {
+          "title": "Descrição do Setor",
+          "variable": "DESCSET",
+          "type": "string",
+          "width": 30,
+          "workPiece": 3,
+          "recordKey": false,
+          "detail": true
+        },
+        {
+          "title": "Responsável",
+          "variable": "RES",
+          "type": "string",
+          "width": 25,
+          "workPiece": 4,
+          "recordKey": false,
+          "detail": true
+        },
+        {
+          "title": "Tempo Meta",
+          "variable": "TEMMETA",
+          "type": "decimal",
+          "width": 8,
+          "workPiece": 5,
+          "recordKey": false,
+          "detail": true
+        },
+        {
+          "title": "Vigência",
+          "variable": "VIG",
+          "type": "date",
+          "width": 10,
+          "workPiece": 6,
+          "recordKey": false,
+          "detail": true
+        }
+      ]
+    }
+  ],
+  "indexes": [
+    {
+      "type": "key",
+      "fieldId": "CODEMP",
+      "parameterName": "codEmpresa"
+    },
+    {
+      "type": "key",
+      "fieldId": "CODMOT",
+      "parameterName": "codMotivo"
+    }
+  ]
+}
